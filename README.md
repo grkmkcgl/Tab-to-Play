@@ -1,0 +1,57 @@
+# Tab-to-Play
+
+Gitar tabı ve davul notası çalar. Guitar Pro ve MusicXML dosyalarını açar, notaları çizer ve şarkıyı tüm partileriyle (gitar, bas, davul…) birlikte çalar; çalınan nota imleçle takip edilir. Telefona ve tablete uygulama gibi kurulur, internetsiz çalışır.
+
+## Özellikler
+
+- **Kendi partin otomatik açılır:** ilk açılışta "Hangi enstrümanı çalıyorsun?" diye sorar (Gitar / Bas / Davul / Diğer). Şarkıyı açınca o parti seçili gelir: gitarcıya tab, davulcuya davul notası.
+- **Hız:** %25–%150 arası, ses perdesi bozulmadan. Hazır değerler (%50, %75, %90, %100), orijinal ve o anki BPM.
+- **Döngü:** seçtiğin ölçüleri tekrar tekrar çalar. Döngü paneli açıkken notalarda önce başlangıç, sonra bitiş ölçüsüne dokunman yeterli. Ölçü numarasıyla ya da çalarken "İmleçten" ile de seçebilirsin, bilgisayarda fareyle sürüklemek de olur.
+- **Hız antrenörü:** döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar, örneğin %60'tan %100'e 5'er 5'er.
+- **Partiler:** her parti için Sessiz, Solo ve ses düzeyi. "Kendi partimi sessize al" ile şarkının geri kalanına eşlik edersin.
+- **Metronom** ve başlamadan önce bir ölçü sayma.
+- **Görünüm:** Tab / Nota / İkisi, sayfa ya da tek satır düzeni, yakınlaştırma, çalarken otomatik kaydırma, ekranı açık tutma.
+- **Şarkıya özel ayarlar saklanır:** hız, döngü, sessiz/solo partiler ve seçili parti, şarkıyı tekrar açınca kaldığı gibi gelir.
+- **Kütüphane:** arama (Türkçe karakterlere duyarsız), favoriler, sıralama, silme, paylaşma (dosyayı AirDrop, WhatsApp vb. ile gönderme).
+- **Klavye ve pedal:** Boşluk / PageDown çal-durdur, ← → ölçü değiştir, Home başa sar, + / − hız. Sayfa çevirme pedalları da çoğunlukla PageDown gönderir.
+
+## Kullanım
+
+Uygulamanın adresini telefonda ya da tablette aç:
+
+- **iPhone / iPad (Safari):** Paylaş → **Ana Ekrana Ekle**. Şarkıları ana ekrandaki uygulamanın içinden ekle (Safari sekmesi ile ana ekran uygulamasının depoları ayrıdır). İndirdiğin dosyalar genelde *Dosyalar → İndirilenler* klasöründedir.
+- **Android (Chrome):** menü → **Uygulamayı yükle**. Yükledikten sonra bir .gp dosyasını herhangi bir uygulamadan **Paylaş → Tab-to-Play** ile gönderebilirsin.
+- **Bilgisayar:** dosyaları sayfanın üzerine sürükleyip bırak.
+
+Açılan dosyalar: Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml). Bu dosyalarda her parti ritmiyle birlikte bulunduğu için çalınabilir. Düz metin tablar ritim bilgisi taşımadığından çalınamaz.
+
+Denemek için kütüphane boşken (ya da Ayarlar'dan) **Örnek şarkıyı ekle**: gitar, bas ve davul partisi olan kısa bir parça.
+
+## Gizlilik
+
+Şarkılar yalnızca cihazda (tarayıcının IndexedDB deposunda) saklanır, hiçbir sunucuya gönderilmez. Sayfadaki `Content-Security-Policy` uygulamanın kendi adresi dışına istek atılmasını engeller. Uygulama ilk açılıştan sonra internetsiz de çalışır.
+
+## Geliştirme
+
+Derleme adımı yok: `index.html`, `css/`, `js/` doğrudan yayınlanır. Kütüphaneler `lib/` altında repoda durur.
+
+```bash
+npm install
+npm run serve        # http://localhost:8080
+npm test             # uçtan uca testler (Playwright + Chromium)
+npm test -- döngü    # adında "döngü" geçen testler
+```
+
+Ayrıntılar, yapı ve bilinen tuzaklar için: [GELISTIRME.md](GELISTIRME.md).
+
+## Yayınlama
+
+`main` dalına her gönderimde GitHub Actions testleri çalıştırır, geçerse uygulamayı GitHub Pages'te yayınlar (`.github/workflows/pages.yml`). Bir kerelik ayar: **Settings → Pages → Source: GitHub Actions**.
+
+## Lisanslar
+
+Uygulamanın içinde gelen üçüncü taraf dosyalar kendi lisanslarıyla dağıtılır:
+
+- Nota çizimi ve ses motoru: [alphaTab](https://github.com/CoderLine/alphaTab) 1.8.4, MPL-2.0 (`lib/alphaTab-LICENSE.txt`)
+- Nota yazı tipi: Bravura, SIL Open Font License (`lib/font/Bravura-OFL.txt`)
+- Ses bankası: Sonivox, Apache-2.0 (`lib/soundfont/LICENSE.txt`)

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="theme-color" content="#17130f">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tab-to-Play">
+<meta name="description" content="Gitar tabı ve davul notası çalar: hız, döngü, solo ve sessize alma, metronom. Çevrimdışı çalışır.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+<title>Tab-to-Play</title>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></symbol>
+  <symbol id="i-start" viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></symbol>
+  <symbol id="i-speed" viewBox="0 0 24 24"><path d="M12 4a9 9 0 0 0-7.8 13.5l1.7-1A7 7 0 1 1 19 12a7 7 0 0 1-.9 3.5l1.7 1A9 9 0 0 0 12 4zm4.6 3-5.9 3.9a1.8 1.8 0 1 0 2.4 2.4z"/></symbol>
+  <symbol id="i-mix" viewBox="0 0 24 24"><path d="M4 6h9v2H4zm13 0h3v2h-3zm-2-2h2v6h-2zM4 16h3v2H4zm7 0h9v2h-9zm-2-2h2v6H9z"/></symbol>
+  <symbol id="i-view" viewBox="0 0 24 24"><path d="M3 5h18v2H3zm0 4h18v1.5H3zm0 3.5h18V14H3zM3 17h12v2H3z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4-4.6-4.6z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.4 5 5 6.4l5.6 5.6L5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18.5" r="2"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
+</svg>
+
+<!-- Kütüphane -->
+<section id="libView" class="view" hidden>
+  <header class="topbar">
+    <h1 class="brand"><img src="icons/icon.svg" alt="" width="28" height="28">Tab-to-Play</h1>
+    <button id="btnSettings" class="icon-btn" type="button" aria-label="Ayarlar"><svg class="ic"><use href="#i-gear"/></svg></button>
+  </header>
+  <div class="lib-tools" id="libTools">
+    <input id="q" type="search" placeholder="Şarkı ara" aria-label="Şarkı ya da sanatçı ara" autocomplete="off" enterkeyhint="search">
+    <select id="sort" aria-label="Sıralama">
+      <option value="recent">Son açılan</option>
+      <option value="added">Son eklenen</option>
+      <option value="title">A–Z</option>
+    </select>
+    <button id="favOnly" class="chip" type="button" aria-pressed="false" aria-label="Yalnızca favoriler"><svg class="ic"><use href="#i-star"/></svg></button>
+  </div>
+  <ul id="songList" class="song-list"></ul>
+  <p id="noResult" class="muted center" hidden>Aramana uyan şarkı yok.</p>
+  <div id="welcome" class="welcome" hidden>
+    <h2>Kütüphanen boş</h2>
+    <ol>
+      <li>Çalmak istediğin şarkının <b>Guitar Pro</b> (.gp, .gp5, .gpx…) ya da <b>MusicXML</b> dosyasını indir. Bu dosyalarda gitar, bas ve davul partileri ritimleriyle birlikte bulunur.</li>
+      <li>Aşağıdaki <b>Şarkı ekle</b> düğmesiyle dosyayı seç. iPhone ve iPad'de indirilenler genelde <i>Dosyalar → İndirilenler</i> klasöründedir.</li>
+      <li>Android'de uygulamayı ana ekrana ekledikten sonra dosyayı <b>Paylaş</b> menüsünden doğrudan Tab-to-Play'e de gönderebilirsin.</li>
+    </ol>
+    <button id="btnDemo" class="btn" type="button">Örnek şarkıyı ekle</button>
+  </div>
+  <div class="fab-wrap">
+    <label class="btn primary fab" for="fileIn"><svg class="ic"><use href="#i-plus"/></svg>Şarkı ekle</label>
+    <input id="fileIn" type="file" multiple hidden>
+  </div>
+</section>
+
+<!-- Çalar -->
+<section id="playerView" class="view player" hidden>
+  <header class="topbar">
+    <button id="btnBack" class="icon-btn" type="button" aria-label="Kütüphaneye dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <div class="song-head"><b id="pTitle"></b><span id="pArtist"></span></div>
+    <button id="btnTrack" class="chip track-chip" type="button" data-panel="mix" aria-label="Parti seç"></button>
+  </header>
+  <main id="sheetWrap" class="sheet-wrap">
+    <div id="sheet"></div>
+    <div id="loading" class="loading" hidden><span class="spinner"></span><span id="loadingText">Yükleniyor…</span></div>
+  </main>
+  <footer class="controls" id="controls">
+    <!-- Paneller -->
+    <div id="p-speed" class="panel" hidden role="dialog" aria-label="Hız">
+      <div class="panel-head"><h3>Hız ve tempo</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <div class="stepper big">
+        <button type="button" class="btn" data-sp="-5" aria-label="Yavaşlat">−</button>
+        <output id="spOut">%100</output>
+        <button type="button" class="btn" data-sp="5" aria-label="Hızlandır">+</button>
+      </div>
+      <input id="spRange" type="range" min="25" max="150" step="5" value="100" aria-label="Hız">
+      <div class="presets">
+        <button type="button" class="chip" data-spv="50">%50</button>
+        <button type="button" class="chip" data-spv="75">%75</button>
+        <button type="button" class="chip" data-spv="90">%90</button>
+        <button type="button" class="chip" data-spv="100">%100</button>
+      </div>
+      <p class="muted small" id="bpmInfo"></p>
+      <label class="switch"><input type="checkbox" id="metro"><span>Metronom</span></label>
+      <label class="switch"><input type="checkbox" id="countIn"><span>Başlamadan önce bir ölçü say</span></label>
+      <details class="trainer" id="trainerBox">
+        <summary>Hız antrenörü</summary>
+        <p class="muted small">Döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar.</p>
+        <div class="tr-grid">
+          <label>Başlangıç %<input id="trStart" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
+          <label>Hedef %<input id="trTarget" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
+          <label>Artış %<input id="trStep" type="number" inputmode="numeric" min="1" max="50"></label>
+          <label>Kaç turda bir<input id="trEvery" type="number" inputmode="numeric" min="1" max="20"></label>
+        </div>
+        <button id="trBtn" type="button" class="btn primary">Antrenörü başlat</button>
+        <p id="trStatus" class="small"></p>
+      </details>
+    </div>
+
+    <div id="p-loop" class="panel" hidden role="dialog" aria-label="Döngü">
+      <div class="panel-head"><h3>Döngü <small class="muted">(ölçü)</small></h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <label class="switch"><input type="checkbox" id="loopOn"><span>Seçili bölümü tekrar tekrar çal</span></label>
+      <div class="loop-grid">
+        <span>Başlangıç</span>
+        <div class="stepper"><button type="button" class="btn" data-lf="-1" aria-label="Başlangıcı geri al">−</button><output id="lfOut">1</output><button type="button" class="btn" data-lf="1" aria-label="Başlangıcı ileri al">+</button></div>
+        <button type="button" class="btn small-btn" id="lfCur">İmleçten</button>
+        <span>Bitiş</span>
+        <div class="stepper"><button type="button" class="btn" data-lt="-1" aria-label="Bitişi geri al">−</button><output id="ltOut">1</output><button type="button" class="btn" data-lt="1" aria-label="Bitişi ileri al">+</button></div>
+        <button type="button" class="btn small-btn" id="ltCur">İmleçten</button>
+      </div>
+      <p class="tap-hint" id="loopTapHint">Notalarda önce başlangıç, sonra bitiş ölçüsüne dokun.</p>
+      <p class="muted small">Çalarken “İmleçten” o an çalınan ölçüyü alır. Bilgisayarda fareyle notaların üzerinde sürükleyerek de seçebilirsin.</p>
+      <button type="button" class="btn" id="loopClear">Döngüyü kaldır</button>
+    </div>
+
+    <div id="p-mix" class="panel" hidden role="dialog" aria-label="Partiler">
+      <div class="panel-head"><h3>Partiler</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <label class="switch mine"><input type="checkbox" id="muteMine"><span>Kendi partimi sessize al <small class="muted">(şarkının geri kalanıyla sen çal)</small></span></label>
+      <p class="muted small">Ekranda gösterilecek partiyi soldan seç. Sessiz ve Solo düğmeleri yalnızca sesi etkiler.</p>
+      <ul id="mixList" class="mix-list"></ul>
+    </div>
+
+    <div id="p-view" class="panel" hidden role="dialog" aria-label="Görünüm">
+      <div class="panel-head"><h3>Görünüm</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <div class="field"><span>Gösterim</span>
+        <div class="seg" id="segStave">
+          <button type="button" data-v="tab">Tab</button><button type="button" data-v="nota">Nota</button><button type="button" data-v="ikisi">İkisi</button>
+        </div>
+      </div>
+      <p class="muted small" id="staveNote" hidden>Davul partisi her zaman nota olarak gösterilir.</p>
+      <div class="field"><span>Düzen</span>
+        <div class="seg" id="segLayout">
+          <button type="button" data-v="page">Sayfa</button><button type="button" data-v="yatay">Tek satır</button>
+        </div>
+      </div>
+      <div class="field"><span>Boyut</span>
+        <div class="stepper"><button type="button" class="btn" data-zoom="-0.1" aria-label="Küçült">−</button><output id="zoomOut">%100</output><button type="button" class="btn" data-zoom="0.1" aria-label="Büyüt">+</button></div>
+      </div>
+      <label class="switch"><input type="checkbox" id="follow"><span>Çalarken notaları otomatik kaydır</span></label>
+      <label class="switch"><input type="checkbox" id="wake"><span>Çalarken ekranı açık tut</span></label>
+    </div>
+
+    <div class="progress">
+      <span id="posBar" class="pos">Ölçü –</span>
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Şarkıda konum">
+      <span id="posTime" class="pos">0:00 / 0:00</span>
+    </div>
+    <div class="buttons">
+      <button id="btnStart" class="ctl" type="button" aria-label="Başa sar"><svg class="ic"><use href="#i-start"/></svg><span>Başa</span></button>
+      <button id="btnPlay" class="ctl play" type="button" aria-label="Çal" disabled><svg class="ic"><use href="#i-play"/></svg></button>
+      <button class="ctl" type="button" data-panel="speed" aria-expanded="false"><svg class="ic"><use href="#i-speed"/></svg><span id="lblSpeed">%100</span></button>
+      <button class="ctl" type="button" data-panel="loop" aria-expanded="false"><svg class="ic"><use href="#i-loop"/></svg><span id="lblLoop">Döngü</span></button>
+      <button class="ctl" type="button" data-panel="mix" aria-expanded="false"><svg class="ic"><use href="#i-mix"/></svg><span>Partiler</span></button>
+      <button class="ctl" type="button" data-panel="view" aria-expanded="false"><svg class="ic"><use href="#i-view"/></svg><span>Görünüm</span></button>
+    </div>
+  </footer>
+</section>
+
+<dialog id="instDlg" class="dlg">
+  <h2>Hangi enstrümanı çalıyorsun?</h2>
+  <p class="muted">Bir şarkıyı açtığında senin partin otomatik seçilir. Ayarlar'dan sonra değiştirebilirsin.</p>
+  <div class="inst-grid" id="instGrid">
+    <button type="button" class="btn" data-inst="gitar">🎸 Gitar</button>
+    <button type="button" class="btn" data-inst="bas">🎸 Bas</button>
+    <button type="button" class="btn" data-inst="davul">🥁 Davul</button>
+    <button type="button" class="btn" data-inst="diger">🎹 Diğer</button>
+  </div>
+</dialog>
+
+<dialog id="settingsDlg" class="dlg">
+  <div class="panel-head"><h2>Ayarlar</h2><button class="icon-btn" type="button" data-close-dlg aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+  <div class="field"><span>Enstrümanım</span>
+    <div class="seg" id="segInst">
+      <button type="button" data-v="gitar">Gitar</button><button type="button" data-v="bas">Bas</button><button type="button" data-v="davul">Davul</button><button type="button" data-v="diger">Diğer</button>
+    </div>
+  </div>
+  <h3>Şarkı nasıl eklenir?</h3>
+  <ul class="help">
+    <li>Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml) dosyaları açılır.</li>
+    <li>iPhone/iPad: Safari'de indirdiğin dosya <i>Dosyalar → İndirilenler</i>'e düşer; kütüphanede <b>Şarkı ekle</b> ile seç.</li>
+    <li>Android: dosyayı <b>Paylaş</b> menüsünden Tab-to-Play'e gönder ya da <b>Şarkı ekle</b> ile seç.</li>
+    <li>Bilgisayarda dosyaları sayfanın üzerine sürükleyip bırakabilirsin.</li>
+    <li>Bir şarkıyı başka birine göndermek için kütüphanede şarkının yanındaki <b>⋮ → Paylaş</b>.</li>
+  </ul>
+  <button id="btnDemo2" class="btn" type="button">Örnek şarkıyı ekle</button>
+  <h3>Depolama</h3>
+  <p id="storageInfo" class="muted small"></p>
+  <p class="muted small">Şarkıların yalnızca bu cihazda saklanır, hiçbir yere gönderilmez. Uygulama internetsiz de çalışır.</p>
+  <h3>Hakkında</h3>
+  <p class="muted small">Tab-to-Play <span id="ver"></span>. Nota çizimi ve ses: alphaTab (MPL-2.0). Ses bankası: Sonivox (Apache-2.0). Nota yazı tipi: Bravura (SIL OFL).</p>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="dropHint" class="drop-hint" hidden>Dosyaları bırak, kütüphaneye ekleyeyim</div>
+
+<script src="lib/alphaTab.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

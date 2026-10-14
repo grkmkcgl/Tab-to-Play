@@ -1,0 +1,35 @@
+{
+  "name": "Tab-to-Play",
+  "short_name": "Tab-to-Play",
+  "description": "Gitar tabı ve davul notası çalar: hız, döngü, solo ve sessize alma, metronom.",
+  "lang": "tr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#17130f",
+  "theme_color": "#17130f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "paylas",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "dosya",
+          "accept": [
+            ".gp", ".gp3", ".gp4", ".gp5", ".gpx", ".musicxml", ".xml", ".mxl",
+            "application/octet-stream", "application/x-guitar-pro", "application/gpx+xml",
+            "application/xml", "text/xml", "application/vnd.recordare.musicxml+xml", "application/vnd.recordare.musicxml"
+          ]
+        }
+      ]
+    }
+  }
+}

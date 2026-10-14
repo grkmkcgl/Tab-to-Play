@@ -1,0 +1,16 @@
+{
+  "name": "tab-to-play",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gitar tabı ve davul notası çalar",
+  "scripts": {
+    "vendor": "node tools/vendor.mjs",
+    "ornek": "node tools/ornek.cjs",
+    "test": "node tests/run.mjs",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "@coderline/alphatab": "1.8.4",
+    "playwright": "1.56.1"
+  }
+}
