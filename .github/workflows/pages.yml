@@ -37,10 +37,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Yalnızca uygulama dosyalarını topla
-        run: |
-          mkdir _site
-          cp -r index.html sw.js manifest.webmanifest ornek.gp css js lib icons _site/
+      - name: Uygulama dosyalarını topla ve yapı numarasını yaz
+        run: node tools/build.mjs _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

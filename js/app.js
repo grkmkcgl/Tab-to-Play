@@ -1,7 +1,11 @@
 // Tab-to-Play: kütüphane ve çalar.
-import { db } from './db.js';
+// __SURUM__ yayınlanırken (tools/build.mjs) yapı numarasıyla değiştirilir. Sayfa, css ve betikler hep
+// aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
+import { db } from './db.js?v=__SURUM__';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
+const BUILD = '__SURUM__';
+window.ttpBuild = BUILD;
 const at = window.alphaTab;
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
@@ -288,25 +292,28 @@ async function addDemo() {
 $('#btnDemo').addEventListener('click', addDemo);
 $('#btnDemo2').addEventListener('click', addDemo);
 
-// İnternette tab bulma: her site için DuckDuckGo'da site: filtreli arama, tarayıcıda yeni sekmede.
-// Uygulama bu sitelere kendisi bağlanmaz (CSP connect-src 'self' aynen kalır); bağlantı yalnızca
-// kullanıcı dokununca açılır ve arama motoruna yalnızca yazılan şarkı adı gider.
+// İnternette tab bulma: bağlantılar tarayıcıda yeni sekmede açılır. Uygulama bu sitelere kendisi
+// bağlanmaz (CSP connect-src 'self' aynen kalır); siteye yalnızca yazılan şarkı/sanatçı adı gider.
+// Ultimate Guitar'ın kendi araması şarkı adıyla eşleşir (sanatçı eklenirse sonuç çıkmıyor).
+// GProTab ve 911tabs'in arama adres biçimi doğrulanamadığı için şimdilik DuckDuckGo'da site: araması.
+const ddg = (...words) => `https://duckduckgo.com/?q=${encodeURIComponent(clean(words.join(' ')))}`;
 const FIND_SITES = {
-  ug: (q) => `${q} guitar pro site:ultimate-guitar.com`,
-  gprotab: (q) => `${q} site:gprotab.net`,
-  '911tabs': (q) => `${q} guitar pro site:911tabs.com`,
-  web: (q) => `${q} guitar pro tab gp5`,
+  ug: (t) => `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(t)}`,
+  gprotab: (t, a) => ddg(t, a, 'site:gprotab.net'),
+  '911tabs': (t, a) => ddg(t, a, 'guitar pro site:911tabs.com'),
+  web: (t, a) => ddg(t, a, 'guitar pro tab gp5'),
 };
-function findUrl(site, q) {
-  return `https://duckduckgo.com/?q=${encodeURIComponent(FIND_SITES[site](q))}`;
+function findUrl(site, title, artist = '') {
+  return FIND_SITES[site](title, artist);
 }
 function updateFindLinks() {
-  const q = clean($('#findQ').value);
+  const title = clean($('#findQ').value);
+  const artist = clean($('#findArtist').value);
   $$('#findList a').forEach((a) => {
-    if (q) a.href = findUrl(a.dataset.site, q); else a.removeAttribute('href');
-    a.setAttribute('aria-disabled', String(!q));
+    if (title) a.href = findUrl(a.dataset.site, title, artist); else a.removeAttribute('href');
+    a.setAttribute('aria-disabled', String(!title));
   });
-  $('#findEmpty').hidden = !!q;
+  $('#findEmpty').hidden = !!title;
 }
 function openFind() {
   const typed = $('#q').value.trim();
@@ -317,7 +324,9 @@ function openFind() {
 }
 $('#btnFind').addEventListener('click', openFind);
 $('#findQ').addEventListener('input', updateFindLinks);
-$('#findQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+$('#findArtist').addEventListener('input', updateFindLinks);
+$('#findQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#findArtist').focus(); });
+$('#findArtist').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 $('#findDlg [data-close-dlg]').addEventListener('click', () => $('#findDlg').close());
 $('#findDlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 
@@ -1063,7 +1072,7 @@ function updateInstSeg() {
 }
 $('#btnSettings').addEventListener('click', async () => {
   updateInstSeg();
-  $('#ver').textContent = `v${VERSION}`;
+  $('#ver').textContent = `v${VERSION} (${BUILD})`;
   const info = $('#storageInfo');
   info.textContent = `${songs.length} şarkı`;
   try {

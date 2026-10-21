@@ -14,21 +14,35 @@ const TYPES = {
   '.sf2': 'application/octet-stream', '.sf3': 'application/octet-stream', '.gp': 'application/octet-stream',
 };
 
-export function serve(port = 8080) {
+// opts.root: sunulacak klasör (varsayılan repo kökü; çalışırken değiştirilebilir: server.opts.root = …)
+// opts.cdn: true ise GitHub Pages'in CDN'i gibi davranır: sayfa ve sw.js dışındaki her adresin
+// (sorgu dahil) ilk yanıtını saklar ve sonra hep onu verir. Testlerde eski/yeni sürüm karışmasını
+// yeniden üretmek için.
+export function serve(port = 8080, opts = {}) {
+  const cdn = new Map();
   const server = createServer(async (req, res) => {
     try {
-      let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      const base = server.opts.root || root;
+      const url = new URL(req.url, 'http://x');
+      let path = decodeURIComponent(url.pathname);
       if (path.endsWith('/')) path += 'index.html';
-      const file = normalize(join(root, path));
-      if (!file.startsWith(root) || /[\\/](node_modules|tests|\.git)[\\/]/.test(file.slice(root.length))) throw new Error('yasak');
-      if (!(await stat(file)).isFile()) throw new Error('yok');
+      const file = normalize(join(base, path));
+      if (!file.startsWith(base) || /[\\/](node_modules|tests|\.git)[\\/]/.test(file.slice(base.length))) throw new Error('yasak');
+      const cacheable = server.opts.cdn && !/\/(index\.html|sw\.js)$/.test(path);
+      let body = cacheable ? cdn.get(url.pathname + url.search) : null;
+      if (!body) {
+        if (!(await stat(file)).isFile()) throw new Error('yok');
+        body = await readFile(file);
+        if (cacheable) cdn.set(url.pathname + url.search, body);
+      }
       res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
-      res.end(await readFile(file));
+      res.end(body);
     } catch {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('bulunamadı');
     }
   });
+  server.opts = opts;
   return new Promise((resolve) => server.listen(port, () => resolve(server)));
 }
 

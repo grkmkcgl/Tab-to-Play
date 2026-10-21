@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serve } from '../tools/serve.mjs';
+import { build } from '../tools/build.mjs';
 
 const require = createRequire(import.meta.url);
 const fixtures = require('./fixtures.cjs');
@@ -51,7 +52,7 @@ class App {
     Object.assign(this, { browser, ctx, page, t });
   }
 
-  static async open(browser, t, { inst = 'gitar', prefs = {}, viewport = { width: 390, height: 844 }, noPrefs = false } = {}) {
+  static async open(browser, t, { inst = 'gitar', prefs = {}, viewport = { width: 390, height: 844 }, noPrefs = false, base = BASE } = {}) {
     const ctx = await browser.newContext({ viewport, hasTouch: true, isMobile: true, acceptDownloads: true });
     const page = await ctx.newPage();
     const app = new App(browser, ctx, page, t);
@@ -64,9 +65,9 @@ class App {
       app.errors.push(`console: ${m.text()}`);
     });
     page.on('dialog', (d) => (app.onDialog ? app.onDialog(d) : d.dismiss()));
-    ctx.on('request', (r) => { if (!r.url().startsWith(BASE) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) app.external.push(r.url()); });
+    ctx.on('request', (r) => { if (!r.url().startsWith(base) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) app.external.push(r.url()); });
     await page.addInitScript(initScript, { prefs: noPrefs ? null : { instrument: inst, ...prefs } });
-    await page.goto(BASE);
+    await page.goto(base);
     await page.waitForSelector('#libView:not([hidden])');
     return app;
   }
@@ -266,7 +267,7 @@ test('kütüphane: Türkçe arama, favori, sıralama, silme onayı', async (b, t
   await app.close();
 });
 
-test('tab bul: site aramaları yeni sekmede, yalnızca şarkı adıyla', async (b, t) => {
+test('tab bul: Ultimate Guitar kendi aramasında, diğerleri yeni sekmede; yalnızca şarkı/sanatçı adı', async (b, t) => {
   const app = await App.open(b, t, { viewport: { width: 360, height: 740 } });
   const p = app.page;
   // İki alt düğme dar ekrana sığar
@@ -277,24 +278,35 @@ test('tab bul: site aramaları yeni sekmede, yalnızca şarkı adıyla', async (
   assert(await p.isVisible('#findEmpty'), 'boşken uyarı görünmeli');
   eq(await app.ev(() => [...document.querySelectorAll('#findList a')].map((a) => [a.hasAttribute('href'), a.getAttribute('aria-disabled')])),
     [[false, 'true'], [false, 'true'], [false, 'true'], [false, 'true']], 'boşken bağlantılar kapalı');
-  await p.fill('#findQ', '  Akşam  Şarkısı Örnek Grup ');
-  const links = await app.ev(() => [...document.querySelectorAll('#findList a')].map((a) => ({ site: a.dataset.site, href: a.href, target: a.target, rel: a.rel })));
+  const links = () => app.ev(() => [...document.querySelectorAll('#findList a')].map((a) => ({ href: a.href, target: a.target, rel: a.rel })));
   const ddg = (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}`;
-  eq(links.map((l) => l.href), [
-    ddg('Akşam Şarkısı Örnek Grup guitar pro site:ultimate-guitar.com'),
+  const ug = (q) => `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(q)}`;
+  // Yalnızca şarkı adı: fazladan boşluk kalmaz
+  await p.fill('#findQ', '  Akşam  Şarkısı ');
+  eq((await links()).map((l) => l.href), [
+    ug('Akşam Şarkısı'),
+    ddg('Akşam Şarkısı site:gprotab.net'),
+    ddg('Akşam Şarkısı guitar pro site:911tabs.com'),
+    ddg('Akşam Şarkısı guitar pro tab gp5'),
+  ], 'yalnız şarkı adıyla adresler');
+  // Sanatçı eklenince Ultimate Guitar yine yalnızca şarkı adıyla arar (sitenin araması böyle eşleşiyor)
+  await p.fill('#findArtist', 'Örnek Grup');
+  const l2 = await links();
+  eq(l2.map((l) => l.href), [
+    ug('Akşam Şarkısı'),
     ddg('Akşam Şarkısı Örnek Grup site:gprotab.net'),
     ddg('Akşam Şarkısı Örnek Grup guitar pro site:911tabs.com'),
     ddg('Akşam Şarkısı Örnek Grup guitar pro tab gp5'),
-  ], 'arama adresleri');
-  assert(links.every((l) => l.target === '_blank' && l.rel.includes('noreferrer') && l.rel.includes('noopener')), 'yeni sekme, referrer yok');
+  ], 'şarkı + sanatçı adresleri');
+  assert(l2.every((l) => l.target === '_blank' && l.rel.includes('noreferrer') && l.rel.includes('noopener')), 'yeni sekme, referrer yok');
   assert(!(await p.isVisible('#findEmpty')), 'uyarı kaybolmalı');
-  // Dokununca yeni sekmede açılır (dış site burada taklit edilir)
-  await app.ctx.route('https://duckduckgo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'ok' }));
-  const [popup] = await Promise.all([app.ctx.waitForEvent('page'), app.click('#findList a[data-site="gprotab"]')]);
-  eq(popup.url(), ddg('Akşam Şarkısı Örnek Grup site:gprotab.net'), 'açılan sekme');
+  // Dokununca yeni sekmede sitenin kendi arama sayfası açılır (dış site burada taklit edilir)
+  await app.ctx.route('https://www.ultimate-guitar.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'ok' }));
+  const [popup] = await Promise.all([app.ctx.waitForEvent('page'), app.click('#findList a[data-site="ug"]')]);
+  eq(popup.url(), ug('Akşam Şarkısı'), 'açılan sekme');
   await popup.close();
-  app.external = app.external.filter((u) => !u.startsWith('https://duckduckgo.com/'));
-  assert(await p.evaluate(() => !location.href.includes('duckduckgo')), 'uygulama sayfası yerinde kalmalı');
+  app.external = app.external.filter((u) => !u.startsWith('https://www.ultimate-guitar.com/'));
+  assert(await p.evaluate(() => location.href.startsWith(location.origin) && !location.href.includes('ultimate')), 'uygulama sayfası yerinde kalmalı');
   // Kütüphane aramasındaki yazı pencereye gelir
   await p.click('#findDlg [data-close-dlg]');
   await app.addFiles('test-sarki.gp', 'baska.gp');
@@ -302,7 +314,7 @@ test('tab bul: site aramaları yeni sekmede, yalnızca şarkı adıyla', async (
   await p.fill('#q', 'Paranoid');
   await app.click('#btnFind');
   eq(await p.inputValue('#findQ'), 'Paranoid', 'kütüphane aramasından gelmeli');
-  assert((await app.ev(() => document.querySelector('#findList a').href)).includes('Paranoid'), 'bağlantı güncellenmeli');
+  assert((await app.ev(() => document.querySelector('#findList a').href)).endsWith('value=Paranoid'), 'bağlantı güncellenmeli');
   await app.close();
 });
 
@@ -562,6 +574,50 @@ test('dar ekran (360 px): yatay kaydırma yok, düğmeler ve paneller ekrana sı
     await app.closePanels();
   }
   await app.close();
+});
+
+test('güncelleme: CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümden gelir', async (b, t) => {
+  const site1 = join(fixtures.OUT, 'site-1');
+  const site2 = join(fixtures.OUT, 'site-2');
+  build(site1, 'surum-1');
+  build(site2, 'surum-2');
+  const port = PORT + 1;
+  const base = `http://localhost:${port}/`;
+  const srv = await serve(port, { root: site1, cdn: true });
+  try {
+    const app = await App.open(b, t, { base });
+    const p = app.page;
+    const versions = () => p.evaluate(() => [document.querySelector('meta[name="ttp-build"]').content, window.ttpBuild]);
+    await p.evaluate(() => navigator.serviceWorker.ready);
+    await p.reload();
+    await p.waitForFunction(() => !!navigator.serviceWorker.controller);
+    eq(await versions(), ['surum-1', 'surum-1'], 'ilk sürüm');
+    // Yeni sürüm yayınlandı; CDN ilk sürümün dosyalarını hâlâ tutuyor
+    srv.opts.root = site2;
+    await p.reload();
+    await p.waitForSelector('#libView:not([hidden])');
+    eq(await versions(), ['surum-2', 'surum-2'], 'sayfa ve betik aynı sürüm olmalı');
+    await app.click('#btnFind');
+    assert(await p.evaluate(() => document.querySelector('#findDlg').open), 'Tab bul düğmesi çalışmalı');
+    // Yeni service worker devraldıktan sonra yalnızca güncel önbellekler kalır; internetsiz de aynı sürüm açılır
+    // (waitForFunction async fonksiyonun sonucunu beklemiyor; elle yokla)
+    let keys = [];
+    for (let i = 0; i < 60; i++) {
+      keys = await p.evaluate(() => caches.keys());
+      if (keys.some((k) => k.startsWith('ttp-app-surum-2')) && !keys.some((k) => k.startsWith('ttp-app-surum-1'))) break;
+      await p.waitForTimeout(250);
+    }
+    assert(keys.some((k) => k.startsWith('ttp-app-surum-2')) && !keys.some((k) => k.startsWith('ttp-app-surum-1')), `önbellekler: ${keys}`);
+    eq(keys.filter((k) => k.startsWith('ttp-lib-')).length, 1, 'tek kütüphane önbelleği');
+    await app.ctx.setOffline(true);
+    await p.reload();
+    await p.waitForSelector('#libView:not([hidden])');
+    eq(await versions(), ['surum-2', 'surum-2'], 'internetsiz açılış');
+    await app.ctx.setOffline(false);
+    await app.close();
+  } finally {
+    srv.close();
+  }
 });
 
 test('çevrimdışı: uygulama, şarkı ve ses internet olmadan açılır', async (b, t) => {

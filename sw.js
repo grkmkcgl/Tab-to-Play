@@ -1,51 +1,67 @@
-// Çevrimdışı çalışma. Uygulamanın kendi dosyaları önbelleğe alınır; şarkılar IndexedDB'de durur.
-// Küçük dosyalar (sayfa, css, js) önce ağdan denenir (3 sn), olmazsa önbellekten gelir: internet varken
-// her açılışta en yeni sürüm gelir. Büyük kütüphane dosyaları doğrudan önbellekten gelir;
-// bunlar değişince VERSION'ı artır.
-const VERSION = 'v1';
+// Çevrimdışı çalışma. Şarkılar IndexedDB'de durur; burada yalnızca uygulamanın kendi dosyaları var.
+//
+// Sürüm tutarlılığı: yayınlarken tools/build.mjs "__SURUM__"u yapı numarasıyla değiştirir. Sayfa
+// css/js'i "?v=<yapı>" ile ister. Sayfa önce ağdan denenir (3 sn), olmazsa önbellekten gelir.
+// Sürümlü dosyalar önbellekte yoksa ağdan alınır; yeni adres olduğu için CDN'in eski kopyası
+// karışamaz. Eski sayfa her zaman kendi eski dosyalarıyla, yeni sayfa yeni dosyalarıyla çalışır.
+//
+// Büyük kütüphane dosyaları ayrı önbellekte; yalnızca LIB_VERSION değişince yeniden iner.
+const BUILD = '__SURUM__';
+const LIB_VERSION = 'alphatab-1.8.4';
 const SCOPE = new URL(self.registration.scope).pathname;
-const CACHE = `ttp-${VERSION}-${SCOPE}`;
+const APP_CACHE = `ttp-app-${BUILD}-${SCOPE}`;
+const LIB_CACHE = `ttp-lib-${LIB_VERSION}-${SCOPE}`;
 const INBOX = 'ttp-gelen';
-const NETWORK_FIRST = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/db.js', 'manifest.webmanifest'];
-const CACHE_FIRST = [
-  'lib/alphaTab.min.js', 'lib/font/Bravura.woff2', 'lib/font/Bravura.woff', 'lib/soundfont/sonivox.sf3',
+const v = (p) => `${p}?v=${encodeURIComponent(BUILD)}`;
+const APP_FILES = [
+  './', v('css/app.css'), v('js/app.js'), v('js/db.js'), 'manifest.webmanifest', 'ornek.gp',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
-  'icons/apple-touch-icon.png', 'icons/favicon-32.png', 'ornek.gp',
+  'icons/apple-touch-icon.png', 'icons/favicon-32.png',
 ];
-const APP_FILES = [...NETWORK_FIRST, ...CACHE_FIRST];
+const LIB_FILES = ['lib/alphaTab.min.js', 'lib/font/Bravura.woff2', 'lib/font/Bravura.woff', 'lib/soundfont/sonivox.sf3'];
 const abs = (p) => new URL(p, self.registration.scope).href;
-const NETWORK_FIRST_URLS = new Set(NETWORK_FIRST.map(abs));
 const APP_URLS = new Set(APP_FILES.map(abs));
+const LIB_URLS = new Set(LIB_FILES.map(abs));
+const PAGE = abs('./');
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(APP_FILES)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    await (await caches.open(APP_CACHE)).addAll(APP_FILES.map((f) => new Request(abs(f), { cache: 'reload' })));
+    const lib = await caches.open(LIB_CACHE);
+    for (const f of LIB_FILES) if (!(await lib.match(abs(f)))) await lib.add(new Request(abs(f), { cache: 'reload' }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     for (const k of await caches.keys()) {
-      if (k.startsWith('ttp-') && k.endsWith(SCOPE) && k !== CACHE) await caches.delete(k);
+      if (k.startsWith('ttp-') && k.endsWith(SCOPE) && k !== APP_CACHE && k !== LIB_CACHE) await caches.delete(k);
     }
     await self.clients.claim();
   })());
 });
 
-async function networkFirst(req, key) {
-  const cache = await caches.open(CACHE);
+async function networkFirstPage(req) {
+  const cache = await caches.open(APP_CACHE);
   try {
     const res = await Promise.race([
       fetch(req, { cache: 'no-cache' }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('zaman aşımı')), 3000)),
     ]);
-    if (res.ok) await cache.put(key, res.clone());
+    if (res.ok && !res.redirected) {
+      // Önbellekteki sayfa yalnızca bu service worker'ın sürümüyle aynıysa güncellenir
+      const html = await res.clone().text();
+      if (html.includes(`content="${BUILD}"`)) await cache.put(PAGE, res.clone());
+    }
     return res;
   } catch {
-    return (await cache.match(key)) || Response.error();
+    return (await cache.match(PAGE)) || Response.error();
   }
 }
 
-async function cacheFirst(req, key) {
-  const cache = await caches.open(CACHE);
+async function cacheFirst(cacheName, req, key) {
+  const cache = await caches.open(cacheName);
   const hit = await cache.match(key);
   if (hit) return hit;
   const res = await fetch(req);
@@ -75,12 +91,13 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (req.method !== 'GET') return;
-  const key = url.origin + url.pathname;
-  if (req.mode === 'navigate' && (key === abs('./') || key === abs('index.html'))) {
-    e.respondWith(networkFirst(req, abs('./')));
-  } else if (NETWORK_FIRST_URLS.has(key)) {
-    e.respondWith(networkFirst(req, key));
-  } else if (APP_URLS.has(key)) {
-    e.respondWith(cacheFirst(req, key));
+  const path = url.origin + url.pathname;
+  if (req.mode === 'navigate' && (path === PAGE || path === abs('index.html'))) {
+    e.respondWith(networkFirstPage(req));
+  } else if (APP_URLS.has(url.href)) {
+    e.respondWith(cacheFirst(APP_CACHE, req, url.href));
+  } else if (LIB_URLS.has(path)) {
+    e.respondWith(cacheFirst(LIB_CACHE, req, path));
   }
+  // Başka sürüm numaralı dosyalar (ör. yeni sayfanın istediği yeni betik) doğrudan ağdan gelir.
 });
