@@ -58,7 +58,7 @@ class App {
     const app = new App(browser, ctx, page, t);
     app.errors = [];
     app.external = [];
-    page.on('pageerror', (e) => app.errors.push(`pageerror: ${e.message}`));
+    page.on('pageerror', (e) => app.errors.push(`pageerror: ${process.env.VERBOSE ? e.stack : e.message}`));
     page.on('console', (m) => {
       if (m.type() !== 'error') return;
       if (t.allowCsp && /Content Security Policy/.test(m.text())) return;
@@ -119,6 +119,40 @@ class App {
 
   titles() {
     return this.page.$$eval('#songList .song-title', (els) => els.map((e) => e.textContent));
+  }
+
+  // Egzersizi adresinden aç; önceki nota yerine yenisi gelene kadar bekle
+  async openEx(id) {
+    await this.ev(() => { window.__prevScore = window.ttpApi?.score || null; });
+    await this.ev((x) => { location.hash = `#/egzersiz/${x}`; }, id);
+    await this.page.waitForFunction(() => window.ttpApi?.score && window.ttpApi.score !== window.__prevScore, null, { timeout: 30000 });
+    await this.ready();
+  }
+
+  exTitles() {
+    return this.page.$$eval('#exList .ex-title', (els) => els.map((e) => e.textContent));
+  }
+
+  pressed(sel) {
+    return this.page.$$eval(`${sel} [aria-pressed="true"]`, (els) => els.map((e) => e.dataset.v));
+  }
+
+  // Düğmeye ms aralıklarla n kez dokun (vuruşla tempo)
+  tap(sel, n, ms) {
+    return this.ev(async ([q, k, d]) => {
+      for (let i = 0; i < k; i++) {
+        document.querySelector(q).click();
+        if (i < k - 1) await new Promise((r) => setTimeout(r, d));
+      }
+    }, [sel, n, ms]);
+  }
+
+  setRange(sel, v) {
+    return this.ev(([q, x]) => {
+      const r = document.querySelector(q);
+      r.value = x;
+      r.dispatchEvent(new Event('input', { bubbles: true }));
+    }, [sel, v]);
   }
 
   // Ölçü i (0'dan) için beklenen döngü aralığı
@@ -576,6 +610,267 @@ test('dar ekran (360 px): yatay kaydırma yok, düğmeler ve paneller ekrana sı
   await app.close();
 });
 
+test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve davul, seçim hatırlanır', async (b, t) => {
+  const app = await App.open(b, t, { inst: 'davul' });
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  eq(await p.$$eval('#segExInst button', (els) => els.map((e) => e.dataset.v)), ['gitar', 'davul'], 'yalnızca gitar ve davul');
+  eq(await app.pressed('#segExInst'), ['davul'], 'davulcuya davul egzersizleri');
+  eq(await app.pressed('#segExLevel'), ['baslangic'], 'başlangıç seviyesi');
+  const davulB = await app.exTitles();
+  assert(davulB.length === 4 && davulB.includes('Temel rock ritmi'), `davul başlangıç: ${davulB}`);
+  await app.click('#segExLevel [data-v="orta"]');
+  assert((await app.exTitles()).includes('Shuffle (triole)'), 'davul orta');
+  await app.click('#segExInst [data-v="gitar"]');
+  const gitarO = await app.exTitles();
+  assert(gitarO.length === 5 && gitarO.includes('La minör pentatonik'), `gitar orta: ${gitarO}`);
+  await app.click('#segExLevel [data-v="ileri"]');
+  assert((await app.exTitles()).includes('Sweep arpej: Am – Dm – E'), 'gitar ileri');
+  // Her egzersiz tek bir enstrüman/seviye altında; toplam 26
+  let total = 0;
+  for (const inst of ['gitar', 'davul']) {
+    for (const lv of ['baslangic', 'orta', 'ileri']) {
+      await app.click(`#segExInst [data-v="${inst}"]`);
+      await app.click(`#segExLevel [data-v="${lv}"]`);
+      const n = (await app.exTitles()).length;
+      assert(n >= 4, `${inst}/${lv} en az 4 egzersiz olmalı, ${n} var`);
+      total += n;
+    }
+  }
+  eq(total, 26, 'toplam egzersiz');
+  await app.click('#segExInst [data-v="gitar"]');
+  await app.click('#segExLevel [data-v="ileri"]');
+  await p.reload();
+  await p.waitForSelector('#exView:not([hidden])');
+  eq([await app.pressed('#segExInst'), await app.pressed('#segExLevel')], [['gitar'], ['ileri']], 'seçim kalıcı');
+  await app.click('#exBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.close();
+});
+
+test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.ev(() => { window.__prevScore = null; });
+  await app.click('#exList [data-id="g-b2"]');
+  await app.ready();
+  eq([await app.text('#pTitle'), await app.text('#pArtist')], ['Kromatik 1-2-3-4', 'Elektro gitar · Başlangıç'], 'başlık');
+  eq(await app.text('#lblSpeed'), '60 BPM', 'başlangıç temposu');
+  eq(await app.ev(() => ttpApi.playbackSpeed), 0.6, '60 BPM = 100 BPM yazılı notanın %60’ı');
+  eq(await app.ev(() => [ttpApi.metronomeVolume, ttpApi.countInVolume]), [1, 1], 'metronom ve sayma açık');
+  eq(await app.ev(() => ttpApi.isLooping), true, 'döngüde çalar');
+  eq(await app.range(), await app.barTicks(0, 5), 'döngü bütün egzersiz');
+  eq(await app.text('#lblLoop'), '1–6', 'döngü etiketi');
+  eq(await app.ev(() => ttpApi.settings.notation.elements.get(alphaTab.NotationElement.EffectTempo)), false, 'yanıltıcı tempo işareti gizli');
+  eq(await app.ev(() => ttpApi.settings.display.staveProfile), 3, 'tab');
+  await app.panel('speed');
+  assert((await app.text('#exDesc')).includes('alternatif'), 'egzersiz açıklaması');
+  eq(await p.$$eval('#spPresets [data-spv]', (els) => els.map((e) => e.textContent)), ['50', '60', '85', '110'], 'hazır tempolar');
+  await app.click('[data-spv="85"]');
+  eq([await app.ev(() => ttpApi.playbackSpeed), await app.text('#spOut')], [0.85, '85 BPM'], '85 BPM');
+  await app.click('[data-sp="1"]');
+  await app.click('[data-sp="-5"]');
+  eq(await app.text('#lblSpeed'), '81 BPM', '+1 ve −5');
+  await app.setRange('#spRange', 240);
+  await app.click('[data-sp="5"]');
+  eq(await app.ev(() => ttpApi.playbackSpeed), 2.4, 'üst sınır 240 BPM');
+  await app.setRange('#spRange', 30);
+  await app.click('[data-sp="-1"]');
+  eq(await app.ev(() => ttpApi.playbackSpeed), 0.3, 'alt sınır 30 BPM');
+  await app.tap('#tapBtn', 5, 500);
+  const tapped = await app.ev(() => Math.round(ttpApi.playbackSpeed * 100));
+  near(tapped, 120, 'vuruşla tempo (yarım saniyede bir = 120 BPM)', 6);
+  eq(await app.text('#lblSpeed'), `${tapped} BPM`, 'etiket vuruşla bulunan tempo');
+  // Metronom sesi ve kapatma; şarkıların metronom tercihi ayrı
+  await app.setRange('#metroVol', 50);
+  eq(await app.ev(() => ttpApi.metronomeVolume), 0.5, 'metronom sesi');
+  await app.click('#metro');
+  eq(await app.ev(() => ttpApi.metronomeVolume), 0, 'metronom kapandı');
+  eq(await app.ev(() => { const x = JSON.parse(localStorage.getItem('ttp-prefs')); return [x.exMetro, x.metro]; }), [false, false], 'egzersiz tercihi ayrı');
+  await app.click('#metro');
+  eq(await app.ev(() => ttpApi.metronomeVolume), 0.5, 'metronom yeniden açıldı');
+  eq(await p.$$eval('#trainerBox .u', (els) => els.map((e) => e.textContent)), ['BPM', 'BPM', 'BPM'], 'antrenör BPM ile');
+  await app.click('[data-spv="85"]');
+  await app.closePanels();
+  await app.ev(() => { ttpApi.countInVolume = 0; }); // sayma beklemesin
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 600, null, { timeout: 10000 });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 0);
+  // Listeye dön: son tempo görünür; yeniden açınca kaldığı tempo
+  await app.click('#btnBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await p.waitForFunction(() => document.querySelector('#exList [data-id="g-b2"]')?.textContent.includes('Son: 85 BPM'));
+  await app.click('#exList [data-id="g-b2"]');
+  await p.waitForFunction(() => document.querySelector('#lblSpeed').textContent === '85 BPM');
+  await app.ready();
+  eq(await app.ev(() => ttpApi.playbackSpeed), 0.85, 'saklanan tempo uygulandı');
+  // Şarkıya geç: yüzde, metronom kapalı, tempo işareti görünür
+  await app.click('#btnBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#exBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.ev(() => { window.__prevScore = ttpApi.score; });
+  await app.click('#btnDemo');
+  await p.waitForFunction(() => ttpApi.score !== window.__prevScore);
+  await app.ready();
+  eq(await app.text('#lblSpeed'), '%100', 'şarkıda yüzde');
+  eq(await app.ev(() => [ttpApi.playbackSpeed, ttpApi.metronomeVolume]), [1, 0], 'şarkıda metronom kapalı');
+  eq(await app.ev(() => ttpApi.settings.notation.elements.get(alphaTab.NotationElement.EffectTempo)), true, 'şarkıda tempo işareti');
+  eq(await p.$$eval('#spPresets [data-spv]', (els) => els.map((e) => e.textContent)), ['%50', '%75', '%90', '%100'], 'şarkı hazır değerleri');
+  eq(await app.text('[data-sp="-5"]'), '−', 'şarkıda düğme etiketi');
+  assert(!(await p.isVisible('#tapBtn')), 'vuruşla tempo yalnızca egzersizde');
+  await app.close();
+});
+
+test('egzersiz: antrenör tempoyu turda bir artırır ve hedefte durur', async (b, t) => {
+  const app = await App.open(b, t);
+  await app.openEx('d-i3'); // 2 ölçü
+  await app.ev(() => { ttpApi.countInVolume = 0; });
+  await app.panel('speed');
+  await app.click('#trainerBox summary');
+  await app.page.fill('#trStart', '220');
+  await app.page.fill('#trTarget', '240');
+  await app.page.fill('#trStep', '20');
+  await app.page.fill('#trEvery', '1');
+  await app.click('#trBtn');
+  await app.ev(() => { ttpApi.countInVolume = 0; });
+  eq(await app.ev(() => ttpApi.playbackSpeed), 2.2, 'başlangıç 220 BPM');
+  assert((await app.text('#trStatus')).includes('220 BPM (hedef 240 BPM)'), 'durum BPM ile');
+  await app.toast(/Hedef tempoya ulaştın: 240 BPM/);
+  eq(await app.ev(() => ttpApi.playbackSpeed), 2.4, 'hedef tempo');
+  await app.click('#trBtn');
+  await app.click('#btnPlay');
+  await app.close();
+});
+
+test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul ve triole egzersizi çalar', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  const ids = [];
+  for (const inst of ['gitar', 'davul']) {
+    for (const lv of ['baslangic', 'orta', 'ileri']) {
+      await app.click(`#segExInst [data-v="${inst}"]`);
+      await app.click(`#segExLevel [data-v="${lv}"]`);
+      ids.push(...await p.$$eval('#exList [data-id]', (els) => els.map((e) => e.dataset.id)));
+    }
+  }
+  eq(ids.length, 26, 'egzersiz sayısı');
+  for (const id of ids) {
+    await app.openEx(id);
+    const info = await app.ev(() => ({
+      svg: document.querySelectorAll('#sheet svg').length,
+      bars: ttpApi.score.masterBars.length,
+      tracks: ttpApi.score.tracks.length,
+      profile: ttpApi.settings.display.staveProfile,
+      looping: ttpApi.isLooping,
+      chip: document.querySelector('#btnTrack').textContent,
+      // Ölçüsü eksik ya da taşan nota dizisi (egzersiz yazarken yanlış nota sayısı)
+      short: ttpApi.score.tracks[0].staves[0].bars
+        .map((bar, i) => [i + 1, bar.voices[0].beats.reduce((a, x) => a + x.playbackDuration, 0), bar.masterBar.calculateDuration()])
+        .filter(([, got, want]) => got !== want),
+    }));
+    assert(info.svg > 0 && info.bars >= 2 && info.tracks === 1 && info.looping && !info.short.length, `${id}: ${JSON.stringify(info)}`);
+    if (id.startsWith('g-')) assert(info.profile === 3 && info.chip.includes('Elektro gitar'), `${id} gitar tabı: ${JSON.stringify(info)}`);
+    else assert(info.profile === 0 && info.chip.includes('Davul'), `${id} davul notası: ${JSON.stringify(info)}`);
+  }
+  for (const id of ['d-o4', 'g-o3']) {
+    await app.openEx(id);
+    await app.ev(() => { ttpApi.countInVolume = 0; });
+    await app.click('#btnPlay');
+    await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 500, null, { timeout: 10000 });
+    await app.click('#btnPlay');
+    await p.waitForFunction(() => ttpApi.playerState === 0);
+  }
+  await app.close();
+});
+
+test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, çalar ve durur, tercihler kalıcı', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#btnMetro');
+  await p.waitForSelector('#metroView:not([hidden])');
+  eq(await app.text('#mBpm'), '80', 'varsayılan tempo');
+  eq(await p.$$eval('#mBeats i', (els) => els.length), 4, 'dört vuruş ışığı');
+  await app.click('[data-mb="5"]');
+  await app.click('[data-mb="-1"]');
+  eq(await app.text('#mBpm'), '84', '+5 −1');
+  await app.setRange('#mRange', 240);
+  await app.click('[data-mb="5"]');
+  eq(await app.text('#mBpm'), '240', 'üst sınır');
+  await app.setRange('#mRange', 30);
+  await app.click('[data-mb="-5"]');
+  eq(await app.text('#mBpm'), '30', 'alt sınır');
+  await app.tap('#mTap', 5, 500);
+  near(Number(await app.text('#mBpm')), 120, 'vuruşla tempo', 6);
+  await app.click('#segBeats [data-v="3"]');
+  await app.click('#segSub [data-v="3"]');
+  eq(await p.$$eval('#mBeats i', (els) => els.length), 3, 'üç vuruş ışığı');
+  eq([await app.pressed('#segBeats'), await app.pressed('#segSub')], [['3'], ['3']], 'ölçü ve bölüm');
+  await app.setRange('#mRange', 240);
+  await app.click('#mPlay');
+  await p.waitForFunction(() => ttpMetro.running && ttpMetro.played >= 4, null, { timeout: 6000 });
+  eq(await app.text('#mPlay span'), 'Durdur', 'düğme durdur oldu');
+  const cp = await app.ev(() => [ttpMetro.clicks, ttpMetro.played]);
+  // Son çalınan vuruşun ara tıkları henüz yazılmamış olabilir
+  assert(cp[0] >= (cp[1] - 1) * 3 + 1, `triolede vuruş başına üç tık: ${cp}`);
+  await p.waitForFunction(() => !!document.querySelector('#mBeats i.on'));
+  await app.click('#mPlay');
+  eq(await app.ev(() => ttpMetro.running), false, 'durdu');
+  eq(await p.$$eval('#mBeats i.on', (els) => els.length), 0, 'ışıklar söndü');
+  // Boşluk tuşu başlatır/durdurur
+  await app.ev(() => document.activeElement?.blur());
+  await p.keyboard.press('Space');
+  eq(await app.ev(() => ttpMetro.running), true, 'boşlukla başladı');
+  await p.keyboard.press('Space');
+  eq(await app.ev(() => ttpMetro.running), false, 'boşlukla durdu');
+  await p.reload();
+  await p.waitForSelector('#metroView:not([hidden])');
+  eq([await app.text('#mBpm'), await app.pressed('#segBeats'), await app.pressed('#segSub')], ['240', ['3'], ['3']], 'tercihler kalıcı');
+  // Ekrandan çıkınca susar
+  await app.click('#mPlay');
+  await p.waitForFunction(() => ttpMetro.running);
+  await app.click('#mBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  eq(await app.ev(() => ttpMetro.running), false, 'ekrandan çıkınca durdu');
+  await app.close();
+});
+
+test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar', async (b, t) => {
+  const app = await App.open(b, t, { viewport: { width: 360, height: 740 } });
+  const fits = () => app.ev(() => {
+    const w = innerWidth;
+    const out = [...document.querySelectorAll('.view:not([hidden]) button, .view:not([hidden]) input, .panel:not([hidden]) button, .panel:not([hidden]) input')]
+      .filter((e) => e.offsetParent)
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.left < -1 || r.right > w + 1; })
+      .map((e) => e.id || e.textContent.trim() || e.className);
+    return { scroll: document.documentElement.scrollWidth, w, out };
+  });
+  const ok = (f, what) => assert(f.scroll <= f.w && f.out.length === 0, `${what} taşıyor: ${JSON.stringify(f)}`);
+  ok(await fits(), 'kütüphane');
+  await app.click('#btnEx');
+  await app.page.waitForSelector('#exView:not([hidden])');
+  ok(await fits(), 'egzersiz listesi');
+  await app.openEx('g-i2');
+  for (const name of ['speed', 'loop', 'mix', 'view']) {
+    await app.panel(name);
+    if (name === 'speed') await app.click('#trainerBox summary');
+    ok(await fits(), `egzersiz ${name} paneli`);
+    await app.closePanels();
+  }
+  await app.ev(() => { location.hash = '#/metronom'; });
+  await app.page.waitForSelector('#metroView:not([hidden])');
+  ok(await fits(), 'metronom');
+  await app.close();
+});
+
 test('güncelleme: CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümden gelir', async (b, t) => {
   const site1 = join(fixtures.OUT, 'site-1');
   const site2 = join(fixtures.OUT, 'site-2');
@@ -632,7 +927,7 @@ test('çevrimdışı: uygulama, şarkı ve ses internet olmadan açılır', asyn
     for (const n of await caches.keys()) for (const r of await (await caches.open(n)).keys()) keys.push(new URL(r.url).pathname);
     return keys;
   });
-  for (const f of ['/', '/js/app.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
+  for (const f of ['/', '/js/app.js', '/js/egzersiz.js', '/js/metronom.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
     assert(cached.includes(f), `önbellekte yok: ${f}`);
   }
   await app.ctx.setOffline(true);
@@ -640,6 +935,9 @@ test('çevrimdışı: uygulama, şarkı ve ses internet olmadan açılır', asyn
   await p.waitForSelector('#songList .song');
   await app.click('#songList .song-main');
   await app.ready();
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 300, null, { timeout: 10000 });
+  await app.openEx('d-b2');
   await app.click('#btnPlay');
   await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 300, null, { timeout: 10000 });
   await app.ctx.setOffline(false);

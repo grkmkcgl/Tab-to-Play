@@ -128,7 +128,8 @@ a { color: var(--accent); }
 .fab { pointer-events: auto; min-height: 52px; padding: 10px 26px; border-radius: 999px; font-size: 17px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 
 /* Çalar */
-.player { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; height: 100dvh; overflow: hidden; }
+/* minmax(0,1fr): uzun şarkı adı üst çubuğu (ve tüm çaları) ekrandan geniş yapmasın */
+.player { display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .song-head { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .song-head b, .song-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-head span { color: var(--muted); font-size: 14px; }
@@ -304,3 +305,72 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .find-site .ic { color: var(--accent); }
 .find-site:active { transform: scale(.98); }
 .find-site[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+
+/* Egzersiz modu: çalarda yalnızca şarkıda ya da yalnızca egzersizde görünenler */
+.player:not(.ex) .ex-only, .player.ex .song-only { display: none !important; }
+.ex-chip { min-height: 40px; font-weight: 600; }
+.view-title { margin: 0 auto 0 4px; font-size: 20px; }
+.ex-wrap {
+  max-width: 820px; margin: 0 auto;
+  padding: 12px calc(12px + var(--safe-r)) calc(40px + var(--safe-b)) calc(12px + var(--safe-l));
+}
+.ex-tools { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.seg.wide { display: flex; }
+.seg.wide button { flex: 1; min-height: 44px; padding: 4px 8px; }
+.metro-card {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); text-align: left;
+}
+.metro-card .ic { color: var(--accent); width: 30px; height: 30px; }
+.metro-card span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.metro-card small { color: var(--muted); font-size: 13px; }
+.metro-card:active { transform: scale(.98); }
+.ex-list { list-style: none; margin: 0; padding: 0; }
+.ex-item { border-bottom: 1px solid var(--line); animation: fadeIn .18s ease-out; }
+.ex-main {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%;
+  padding: 12px 4px; border: 0; background: none; text-align: left;
+}
+.ex-title { font-weight: 650; font-size: 17px; }
+.ex-desc-l { color: var(--muted); font-size: 14px; }
+.ex-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.ex-meta .last { color: var(--text); font-weight: 600; }
+.ex-prog { height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
+.ex-prog i { display: block; height: 100%; background: var(--accent); }
+.ex-desc { margin: 0 0 4px; font-size: 14px; color: var(--muted); }
+/* Egzersizde tempo: üstte BPM, altında −5 −1 +1 +5 (dar ekrana tek satır sığmıyor) */
+.player.ex .stepper.big { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.player.ex .stepper.big output { grid-column: 1 / -1; order: -1; font-size: 30px; }
+.player.ex .stepper.big .btn { min-width: 0; font-size: 18px; }
+.player.ex [data-sp="-5"] { order: 1; }
+.player.ex [data-sp="-1"] { order: 2; }
+.player.ex [data-sp="1"] { order: 3; }
+.player.ex [data-sp="5"] { order: 4; }
+.tap-btn { width: 100%; margin: 4px 0; flex-direction: column; gap: 0; }
+#mTap { flex-direction: column; gap: 0; }
+.metro-vol { padding: 0 0 4px 34px; }
+
+/* Metronom */
+.metro {
+  display: flex; flex-direction: column; gap: 12px;
+  max-width: 520px; margin: 0 auto;
+  padding: 16px calc(16px + var(--safe-r)) calc(30px + var(--safe-b)) calc(16px + var(--safe-l));
+}
+.m-beats { display: flex; justify-content: center; gap: 10px; min-height: 30px; flex-wrap: wrap; }
+.m-beats i {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--panel-2); border: 2px solid var(--line);
+  transition: background .06s, transform .06s;
+}
+.m-beats i.first { border-color: var(--accent); }
+.m-beats i.on { background: var(--text); transform: scale(1.15); }
+.m-beats i.first.on { background: var(--accent); }
+.m-bpm { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.m-bpm output { font-size: 64px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1; }
+.m-bpm span { color: var(--muted); font-weight: 600; }
+.m-step { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.m-step .btn { padding: 4px; font-size: 18px; }
+.metro input[type="range"] { width: 100%; }
+.m-play { min-height: 56px; font-size: 18px; }
+.metro .field { flex-direction: column; align-items: stretch; gap: 6px; min-height: 0; color: var(--muted); font-size: 14px; }
+.metro .field .seg { color: var(--text); font-size: 16px; }
+.m-vol { gap: 12px; }

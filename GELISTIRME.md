@@ -5,7 +5,7 @@ Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metin
 ## Kurallar
 
 - **Ağ yok.** Uygulama yalnızca kendi dosyalarını yükler. Tek dış bağlantı **Tab bul** penceresindeki linkler: `target="_blank" rel="noopener noreferrer"` ile DuckDuckGo'da `site:` filtreli arama açar (`FIND_SITES` / `findUrl` in `js/app.js`), içinde yalnızca kullanıcının yazdığı şarkı adı var; uygulama bu adreslere `fetch` etmez. Ultimate Guitar kendi arama sayfasında açılır (`search.php?search_type=title&value=<şarkı adı>`, yalnızca şarkı adıyla eşleşiyor, sanatçı eklenmez). GProTab ve 911tabs'in arama adres biçimi doğrulanamadığı için şimdilik DuckDuckGo'da `site:` araması. `index.html`'deki CSP (`default-src 'self'`) bunu zorlar; CDN, analitik, harici yazı tipi eklenmez. `script-src`/`worker-src`'deki `blob:` alphaTab'ın worker'ı içindir, `style-src 'unsafe-inline'` alphaTab'ın eklediği `<style>` içindir.
-- **Şarkılar yalnızca cihazda** (IndexedDB). `localStorage` yalnızca cihaz tercihleri için (`ttp-prefs`). Cache Storage: uygulama dosyaları (`ttp-<sürüm>-<kapsam>`) ve Android paylaşımından gelen dosyalar için geçici kutu (`ttp-gelen`, içe aktarılınca boşalır).
+- **Şarkılar yalnızca cihazda** (IndexedDB). Egzersiz ilerlemesi de öyle (ayrı veritabanı, aşağıda). `localStorage` yalnızca cihaz tercihleri için (`ttp-prefs`). Cache Storage: uygulama dosyaları (`ttp-<sürüm>-<kapsam>`) ve Android paylaşımından gelen dosyalar için geçici kutu (`ttp-gelen`, içe aktarılınca boşalır).
 - Test dosyaları yapaydır (`tests/fixtures.cjs`, `tools/ornek.cjs`). Repoya gerçek şarkı dosyası konmaz.
 
 ## Yapı
@@ -14,8 +14,10 @@ Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metin
 |---|---|
 | `index.html` | İşaretleme, CSP, ikon sprite'ı, paneller ve diyaloglar |
 | `css/app.css` | Koyu tema, telefon/tablet düzeni, alphaTab imleç renkleri |
-| `js/app.js` | Kütüphane, içe aktarma, çalar, hız, döngü, antrenör, partiler, görünüm, yönlendirme (`#/`, `#/sarki/<id>`) |
-| `js/db.js` | IndexedDB: `songs` (bilgi + şarkıya özel ayarlar), `files` (dosyanın kendisi) |
+| `js/app.js` | Kütüphane, içe aktarma, çalar, hız, döngü, antrenör, partiler, görünüm, egzersiz listesi, metronom ekranı, yönlendirme (`#/`, `#/sarki/<id>`, `#/egzersiz`, `#/egzersiz/<id>`, `#/metronom`) |
+| `js/db.js` | IndexedDB: `songs` (bilgi + şarkıya özel ayarlar), `files` (dosyanın kendisi); egzersiz ilerlemesi ayrı veritabanında |
+| `js/egzersiz.js` | Egzersizler (elektro gitar ve davul, üç seviye): alphaTex olarak kodda üretilir |
+| `js/metronom.js` | Tek başına metronom (Web Audio, ses dosyası yok) ve vuruşla tempo bulma (`tapper`) |
 | `sw.js` | Çevrimdışı önbellek + Android paylaş hedefi (`POST paylas`) |
 | `tools/build.mjs` | Yayın paketini (`_site`) hazırlar, `__SURUM__`'u yapı numarasıyla değiştirir |
 | `lib/` | alphaTab, Bravura yazı tipi, Sonivox ses bankası (`npm run vendor` ile node_modules'tan kopyalanır) |
@@ -27,7 +29,16 @@ Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metin
 - `songs` kaydı: `{id (SHA-256'nın ilk 12 baytı), file, title, artist, tracks:[{name, kind, tab}], bars, tempo, size, added, opened, fav, s}`.
 - `s` (şarkıya özel): `speed`, `track` (gösterilen parti), `mute`/`solo`/`vol` (parti indeksine göre), `loop:{on, from, to}` (0'dan ölçü indeksi), `tr` (antrenör: `start, target, step, every`).
 - `kind`: `gitar | bas | davul | diger` (program numarası, ad ve akorttan tahmin). `tab`: partinin telli akordu var mı. `openSong` dosyayı her açılışta yeniden okuyup `tracks`'i günceller, yani eski kayıtlar kendiliğinden düzelir.
-- Cihaz tercihleri (`ttp-prefs`): `instrument, scale, layout, stave, follow, wake, metro, countIn, sort`.
+- Cihaz tercihleri (`ttp-prefs`): `instrument, scale, layout, stave, follow, wake, metro, countIn, metroVol, sort`; egzersiz: `exMetro, exCountIn` (şarkılardan ayrı, varsayılan açık), `exInst, exLevel` (listede seçili olan); metronom ekranı: `mBpm, mBeats, mSub, mAccent, mVol`.
+- Egzersiz ilerlemesi: veritabanı `tab-to-play-egzersiz`, depo `progress`, kayıt `{id, s, opened}` (`s` şarkılardaki gibi: `speed` = BPM, `loop`, `tr`, `mute`…). Şarkı veritabanının sürümünü yükseltmemek için ayrı: yükseltme, eski sürüm başka sekmede açıksa bekler.
+
+## Egzersiz modu
+
+- Egzersiz, çalarda şarkı gibi açılır (`showPlayer`); `cur.ex` egzersiz tanımını taşır, `#playerView.ex` sınıfı arayüzü değiştirir (`.ex-only` / `.song-only`).
+- **Tempo = BPM:** her egzersiz `\tempo 100` yazılır, hız yüzdesi doğrudan BPM olur (`s.speed` 72 → 72 BPM, `playbackSpeed` 0.72). Böylece tempo değişince nota yeniden çizilmez ve hız antrenörü olduğu gibi çalışır. Sınırlar 30–240 (`EX_BPM_MIN/MAX`). Notadaki tempo işareti (yanlış olarak 100 yazardı), başlık, akort ve dinamik işareti egzersizde gizlenir.
+- Egzersiz döngüde açılır (bütün ölçüler), metronom ve sayma varsayılan açıktır. Metronom sesi `metroVol` (%20–200) hem şarkıda hem egzersizde geçerli.
+- **Yeni egzersiz:** `js/egzersiz.js`'te `GUITAR` ya da `DRUMS` listesine `{id, level, title, desc, bpm, min, max, bars, prog?, ts?}` ekle. `bars` ölçü başına alphaTex dizisi (`:8 0.6 2.6 …`); yardımcılar: `bars()` (notaları ölçülere böler, triole/altılık), `acrossStrings()`, `rock8()`. Davul adları alphaTab'ın GP adlarının küçük harfli hâli (`kickhit`, `snarehit`, `hihatclosed`, `ridemiddle`, `crashhighhit`, `hightomhit`, `lowtomhit`, `lowfloortomhit`); dikkat: `highfloortomhit` en tiz tom (MIDI 50). Test, her egzersizin açıldığını ve ölçülerinin tam dolduğunu kontrol eder.
+- **Metronom ekranı** (`Metronome`): AudioContext saatine ~150 ms ileri tık yazılır (arka planda 1,5 sn, zamanlayıcılar seyrekleştiği için); vuruş ışıkları aynı zamanlara göre `requestAnimationFrame` ile yanar. Ekrandan çıkınca durur.
 
 ## alphaTab (1.8.4) tuzakları
 
@@ -40,20 +51,21 @@ Hepsi kodda yorumla işaretli:
 5. Parti sessiz/solo/ses değişiklikleri (`changeTrack*`) yalnızca sentezleyiciye gider, `track.playbackInfo`'ya yazılmaz. Durum `cur.s`'te tutulur ve her `playerReady`'de yeniden uygulanır.
 6. Konum (`tickPosition`) bir iki tik sapabilir; testler `near()` ile karşılaştırır.
 7. Sayfanın en altındaki "rendered by alphaTab" yazısı kütüphaneden gelir, ayarla kapatılamıyor.
+8. **Seçim (döngü vurgusu) yeni çizimde eski vuruşlarla yeniden çiziliyor.** alphaTab son seçimi hatırlar ve her çizimden sonra yeniden çizer; başka nota ya da başka parti çizilince eski vuruşlar bulunamaz (`realBounds` hatası). `resetSelection()` çizimden önce seçimi yeni partinin tek bir vuruşuna çeker (tek vuruşluk seçim çizilmez). Ayrıca `playerReady` çizimden önce gelebilir: o anda `playbackRange` atamak aynı hatayı veriyor; aralık hatadan önce kurulduğu için `applyLoop` hatayı yutar, `highlightLoop` da çizim güncel değilse bekler.
 
 ## Test
 
 ```bash
 npm install
-npm test                 # 21 senaryo, ~45 sn
+npm test                 # 27 senaryo, ~70 sn
 npm test -- partiler     # adında "partiler" geçenler
 VERBOSE=1 npm test       # hata yığınlarıyla
 ```
 
 - Playwright kendi Chromium'unu ister (`npx playwright install chromium`). Bulut ortamında `/opt/pw-browsers` hazırsa kurulum gerekmez.
 - Her test temiz bir tarayıcı bağlamında (boş IndexedDB) çalışır. `App` yardımcısı tercihleri yazar, alphaTab'ın `changeTrackMute/Solo/Volume` çağrılarını `window.__calls`'a kaydeder, CSP ihlallerini ve uygulama dışı istekleri yakalar. Bunlardan biri olursa test kırmızı olur.
-- Kapsanan senaryolar: ilk açılış ve enstrüman sorusu; gitarcı/davulcu için doğru parti; GP + MusicXML + bozuk + tekrar eklenen dosya; Türkçe arama, favori, sıralama, silme onayı; Tab bul (Ultimate Guitar'ın kendi araması, diğerlerinin adresleri, yeni sekme, referrer yok, boşken kapalı, kütüphane aramasından şarkı adı); güncellemede sürüm tutarlılığı (eski dosyaları tutan CDN taklidiyle sayfa ve betik aynı sürüm, eski önbellek silinir, internetsiz açılış); paylaşım (indirme yedeği); hız sınırları ve BPM; metronom/sayma kalıcılığı; döngü (ölçü, imleçten, içeri/dışarı dokunma, iki dokunuşla seçme, kaldırma); döngünün gerçekten tekrar etmesi ve antrenörün hızlandırması; partiler (sessiz, solo, ses, parti değiştirme, yeniden açılışta uygulanma); görünüm ayarları; şarkıya özel ayarların kalıcılığı; geri düğmesi; klavye/pedal; 360 px ekranda taşma olmaması; çevrimdışı açılış ve çalma; Android paylaş hedefi; CSP ağ kilidi.
-- Kapsanmayanlar (elle denenmeli): gerçek iPhone/iPad/Android'de ses, ana ekrana ekleme, paylaş menüsü; Safari/WebKit.
+- Kapsanan senaryolar: ilk açılış ve enstrüman sorusu; gitarcı/davulcu için doğru parti; GP + MusicXML + bozuk + tekrar eklenen dosya; Türkçe arama, favori, sıralama, silme onayı; Tab bul (Ultimate Guitar'ın kendi araması, diğerlerinin adresleri, yeni sekme, referrer yok, boşken kapalı, kütüphane aramasından şarkı adı); güncellemede sürüm tutarlılığı (eski dosyaları tutan CDN taklidiyle sayfa ve betik aynı sürüm, eski önbellek silinir, internetsiz açılış); paylaşım (indirme yedeği); hız sınırları ve BPM; metronom/sayma kalıcılığı; döngü (ölçü, imleçten, içeri/dışarı dokunma, iki dokunuşla seçme, kaldırma); döngünün gerçekten tekrar etmesi ve antrenörün hızlandırması; partiler (sessiz, solo, ses, parti değiştirme, yeniden açılışta uygulanma); görünüm ayarları; şarkıya özel ayarların kalıcılığı; geri düğmesi; klavye/pedal; 360 px ekranda taşma olmaması; çevrimdışı açılış ve çalma (egzersiz dahil); Android paylaş hedefi; CSP ağ kilidi; egzersiz listesi (yalnızca elektro gitar ve davul, seviye, seçimin kalıcılığı, toplam 26); egzersizde BPM ile tempo (hazır tempolar, ±1/±5, sınırlar, vuruşla tempo), metronom/sayma varsayılan açık ve şarkılardan ayrı, metronom sesi, döngü, tempo işaretinin gizlenmesi, tempo saklanır ve listede görünür, sonra açılan şarkı etkilenmez; antrenörün BPM ile hedefe çıkması; 26 egzersizin hepsinin açılması, çizilmesi ve ölçülerinin tam olması; metronom ekranı (tempo, sınırlar, vuruşla tempo, ölçü/bölüm, triolede ara tıklar, vuruş ışıkları, boşluk tuşu, tercihlerin kalıcılığı, ekrandan çıkınca durma); 360 px'te egzersiz ekranları.
+- Kapsanmayanlar (elle denenmeli): gerçek iPhone/iPad/Android'de ses, ana ekrana ekleme, paylaş menüsü; Safari/WebKit; metronomun ekran kapalıyken ya da uygulama arka plandayken düzenli çalması (tarayıcı zamanlayıcıları seyrekleştirir).
 
 ## Sürüm yükseltme
 

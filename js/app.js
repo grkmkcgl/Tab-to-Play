@@ -2,8 +2,10 @@
 // __SURUM__ yayınlanırken (tools/build.mjs) yapı numarasıyla değiştirilir. Sayfa, css ve betikler hep
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
+import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, EX_TEMPO, LEVELS, exerciseTex, findExercise } from './egzersiz.js?v=__SURUM__';
+import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -28,7 +30,19 @@ function loadPrefs() {
     wake: true,
     metro: false,
     countIn: false,
+    metroVol: 100, // çalardaki metronomun sesi (%)
     sort: 'recent',
+    // Egzersizler: metronom ve sayma varsayılan açık, şarkılardaki tercihten ayrı
+    exMetro: true,
+    exCountIn: true,
+    exInst: null,
+    exLevel: 'baslangic',
+    // Tek başına metronom
+    mBpm: 80,
+    mBeats: 4,
+    mSub: 1,
+    mAccent: true,
+    mVol: 80,
   };
   try { return { ...d, ...JSON.parse(localStorage.getItem('ttp-prefs') || '{}') }; } catch { return d; }
 }
@@ -178,16 +192,26 @@ async function checkInbox() {
   }
 }
 
+// ---------------------------------------------------------------- görünümler
+const VIEWS = ['libView', 'exView', 'metroView', 'playerView'];
+// Başka bir görünüme geçerken çalanı durdur
+function showView(id) {
+  if (id !== 'playerView') {
+    pause();
+    closePanels();
+    if (trainer.on) stopTrainer(false);
+  }
+  if (id !== 'metroView') metro.stop();
+  if (id !== 'playerView' && id !== 'metroView') releaseWake();
+  for (const v of VIEWS) $(`#${v}`).hidden = v !== id;
+}
+
 // ---------------------------------------------------------------- kütüphane
 let songs = [];
 let favOnly = false;
 
 async function showLibrary() {
-  pause();
-  closePanels();
-  releaseWake();
-  $('#playerView').hidden = true;
-  $('#libView').hidden = false;
+  showView('libView');
   document.title = 'Tab-to-Play';
   songs = await db.allSongs();
   renderList();
@@ -384,7 +408,10 @@ function flushSave() {
   clearTimeout(saveTimer);
   const song = pendingSave;
   pendingSave = null;
-  if (song) db.putSong(song).catch((e) => console.warn('Kaydedilemedi', e));
+  if (!song) return;
+  // Egzersizin kendisi kodda; yalnızca ilerlemesi (tempo, döngü, antrenör…) saklanır
+  const put = song.ex ? db.putEx({ id: song.id, s: song.s, opened: song.opened }) : db.putSong(song);
+  put.catch((e) => console.warn('Kaydedilemedi', e));
 }
 addEventListener('pagehide', flushSave);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
@@ -409,6 +436,11 @@ function applyDisplay() {
   st.display.layoutMode = prefs.layout === 'yatay' ? at.LayoutMode.Horizontal : at.LayoutMode.Page;
   st.display.scale = prefs.scale;
   st.player.scrollMode = prefs.follow ? at.ScrollMode.Continuous : at.ScrollMode.Off;
+  // Egzersizler hep 100 BPM yazılı (hız = BPM); nota üstündeki tempo işareti yanıltmasın.
+  // Başlık üst çubukta var; akort ve dinamik işareti egzersizde yalnızca kalabalık.
+  for (const k of ['EffectTempo', 'ScoreTitle', 'GuitarTuning', 'EffectDynamics']) {
+    st.notation.elements.set(at.NotationElement[k], !cur?.ex);
+  }
   api.updateSettings();
 }
 
@@ -489,21 +521,62 @@ async function openSong(id) {
     location.replace('#/');
     return;
   }
+  song.tracks = sc.tracks.map(trackInfo); // eski kayıtları da günceller
+  showPlayer(song, sc);
+}
+
+// alphaTex metninden nota (egzersizler)
+function texScore(tex) {
+  const imp = new at.importer.AlphaTexImporter();
+  imp.initFromString(tex, new at.Settings());
+  return imp.readScore();
+}
+
+async function openExercise(id) {
+  const ex = findExercise(id);
+  if (!ex) { location.replace('#/egzersiz'); return; }
+  let sc;
+  try { sc = texScore(exerciseTex(ex)); } catch (e) {
+    console.warn(e);
+    toast('Egzersiz açılamadı', 4000);
+    location.replace('#/egzersiz');
+    return;
+  }
+  const saved = await db.getEx(id).catch(() => null);
+  const rec = {
+    id,
+    ex,
+    title: ex.title,
+    artist: `${EX_INST[ex.inst]} · ${LEVELS[ex.level]}`,
+    file: '',
+    tempo: EX_TEMPO,
+    tracks: sc.tracks.map(trackInfo),
+    s: saved?.s || {
+      speed: ex.bpm,
+      loop: { on: true, from: 0, to: sc.masterBars.length - 1 },
+      tr: { start: ex.bpm, target: ex.max, step: 5, every: 2 },
+    },
+  };
+  showPlayer(rec, sc);
+}
+
+// Şarkıyı ya da egzersizi çalarda aç
+function showPlayer(song, sc) {
+  flushSave(); // önceki şarkının bekleyen kaydı kaybolmasın
   clearTimeout(pauseTimer);
   if (api) api.stop();
   cur = song;
-  song.tracks = sc.tracks.map(trackInfo); // eski kayıtları da günceller
   song.bars = sc.masterBars.length;
   songState(song);
   song.opened = Date.now();
-  db.putSong(song).catch(() => {});
+  saveSong();
 
-  $('#libView').hidden = true;
-  $('#playerView').hidden = false;
-  closePanels();
+  showView('playerView');
+  $('#playerView').classList.toggle('ex', !!song.ex);
   $('#pTitle').textContent = song.title;
   $('#pArtist').textContent = song.artist || stripExt(song.file || '');
   document.title = `${song.title} · Tab-to-Play`;
+  renderPresets();
 
   shown = pickTrack(song);
   score = null;
@@ -515,7 +588,17 @@ async function openSong(id) {
   ensureApi();
   applyDisplay();
   updateAll();
+  resetSelection(sc.tracks[shown]);
   api.renderScore(sc, [shown]);
+}
+
+// alphaTab son seçimi (döngü vurgusu) hatırlar ve her çizimden sonra yeniden çizer; yeni nota ya da
+// başka parti çizildiğinde eski vuruşlar yeni çizimde bulunamaz ve hata verir. Seçimi çizilecek
+// partinin ilk vuruşuna çekmek bunu zararsız kılar (tek vuruşluk seçim çizilmez). Döngü vurgusu
+// çizim bitince highlightLoop ile yeniden gelir.
+function resetSelection(track) {
+  const b0 = track?.staves[0]?.bars[0]?.voices[0]?.beats[0];
+  if (api && b0) api.highlightPlaybackRange(b0, b0);
 }
 
 function pickTrack(song) {
@@ -529,8 +612,8 @@ function applyPlayer() {
   if (!api || !cur) return;
   const s = cur.s;
   api.playbackSpeed = (trainer.on ? trainer.speed : s.speed) / 100;
-  api.metronomeVolume = prefs.metro ? 1 : 0;
-  api.countInVolume = prefs.countIn ? 1 : 0;
+  api.metronomeVolume = metroVolume();
+  api.countInVolume = prefs[countKey()] ? 1 : 0;
   applyMix();
   applyLoop();
 }
@@ -587,10 +670,39 @@ function goBar(i) {
 }
 
 // ---------------------------------------------------------------- hız
+// Şarkıda hız yüzde; egzersizde yüzde = BPM (egzersizler 100 BPM yazılı), sınırlar da BPM.
+const spMin = () => (cur?.ex ? EX_BPM_MIN : SPEED_MIN);
+const spMax = () => (cur?.ex ? EX_BPM_MAX : SPEED_MAX);
+const fmtSp = (v) => (cur?.ex ? `${v} BPM` : `%${v}`);
+// Metronom ve sayma: egzersizlerde ayrı tercih (varsayılan açık)
+const metroKey = () => (cur?.ex ? 'exMetro' : 'metro');
+const countKey = () => (cur?.ex ? 'exCountIn' : 'countIn');
+const metroVolume = () => (prefs[metroKey()] ? prefs.metroVol / 100 : 0);
+
+function renderPresets() {
+  const ex = cur?.ex;
+  const vals = ex
+    ? [...new Set([ex.min, ex.bpm, Math.round((ex.bpm + ex.max) / 2 / 5) * 5, ex.max])].sort((a, b) => a - b)
+    : [50, 75, 90, 100];
+  $('#spPresets').replaceChildren(...vals.map((v) => el('button', { type: 'button', class: 'chip', 'data-spv': v, text: ex ? String(v) : `%${v}` })));
+  $('#spRange').min = spMin();
+  $('#spRange').max = spMax();
+  $('#spRange').step = ex ? 1 : 5;
+  for (const id of ['#trStart', '#trTarget']) {
+    $(id).min = spMin();
+    $(id).max = spMax();
+    $(id).step = ex ? 1 : 5;
+  }
+  $$('#trainerBox .u').forEach((u) => { u.textContent = ex ? 'BPM' : '%'; });
+  $('[data-sp="-5"]').textContent = ex ? '−5' : '−';
+  $('[data-sp="5"]').textContent = ex ? '+5' : '+';
+  $('#exDesc').textContent = ex?.desc || '';
+}
+
 function setSpeed(v, later = false) {
   if (!cur) return;
   const s = cur.s;
-  s.speed = clamp(Math.round(v), SPEED_MIN, SPEED_MAX);
+  s.speed = clamp(Math.round(v), spMin(), spMax());
   if (trainer.on) stopTrainer(false);
   if (api) api.playbackSpeed = s.speed / 100;
   saveSong(later);
@@ -604,15 +716,18 @@ function currentSpeed() {
 function updateSpeedUi() {
   if (!cur) return;
   const sp = currentSpeed();
-  $('#spOut').textContent = `%${sp}`;
+  $('#spOut').textContent = fmtSp(sp);
   $('#spRange').value = sp;
-  $('#lblSpeed').textContent = `%${sp}`;
-  $('[data-panel="speed"]').classList.toggle('on', sp !== 100 || trainer.on);
+  $('#lblSpeed').textContent = fmtSp(sp);
+  $('[data-panel="speed"]').classList.toggle('on', cur.ex ? trainer.on : sp !== 100 || trainer.on);
   $$('[data-spv]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.spv) === sp)));
   const tempo = score?.tempo || cur.tempo;
-  $('#bpmInfo').textContent = tempo ? `Orijinal tempo ${Math.round(tempo)} BPM · şu an ${Math.round((tempo * sp) / 100)} BPM` : '';
-  $('#metro').checked = prefs.metro;
-  $('#countIn').checked = prefs.countIn;
+  if (cur.ex) $('#bpmInfo').textContent = `Önerilen tempo ${cur.ex.min}–${cur.ex.max} BPM`;
+  else $('#bpmInfo').textContent = tempo ? `Orijinal tempo ${Math.round(tempo)} BPM · şu an ${Math.round((tempo * sp) / 100)} BPM` : '';
+  $('#metro').checked = !!prefs[metroKey()];
+  $('#countIn').checked = !!prefs[countKey()];
+  $('#metroVol').value = prefs.metroVol;
+  $('#metroVol').disabled = !prefs[metroKey()];
   const t = cur.s.tr;
   $('#trStart').value = t.start;
   $('#trTarget').value = t.target;
@@ -621,7 +736,7 @@ function updateSpeedUi() {
   $('#trBtn').textContent = trainer.on ? 'Antrenörü durdur' : 'Antrenörü başlat';
   $('#trBtn').classList.toggle('primary', !trainer.on);
   $('#trStatus').textContent = trainer.on
-    ? `Çalışıyor: %${trainer.speed} (hedef %${t.target}) · ${trainer.turns}. tur`
+    ? `Çalışıyor: ${fmtSp(trainer.speed)} (hedef ${fmtSp(t.target)}) · ${trainer.turns}. tur`
     : '';
 }
 
@@ -631,8 +746,8 @@ function readTrainerInputs() {
     const v = Number($(id).value);
     return Number.isFinite(v) && v > 0 ? clamp(Math.round(v), lo, hi) : d;
   };
-  t.start = num('#trStart', SPEED_MIN, SPEED_MAX, 60);
-  t.target = num('#trTarget', SPEED_MIN, SPEED_MAX, 100);
+  t.start = num('#trStart', spMin(), spMax(), 60);
+  t.target = num('#trTarget', spMin(), spMax(), 100);
   t.step = num('#trStep', 1, 50, 5);
   t.every = num('#trEvery', 1, 20, 1);
   if (t.target < t.start) [t.start, t.target] = [t.target, t.start];
@@ -651,7 +766,7 @@ function startTrainer() {
   if (cur.s.loop.on) api.tickPosition = api.playbackRange?.startTick ?? api.tickPosition;
   updateSpeedUi();
   if (!playing) play();
-  toast(`Antrenör: %${t.start} → %${t.target}`);
+  toast(`Antrenör: ${fmtSp(t.start)} → ${fmtSp(t.target)}`);
 }
 
 function stopTrainer(announce = true) {
@@ -670,7 +785,9 @@ function onLoopTurn() {
     cur.s.speed = trainer.speed;
     api.playbackSpeed = trainer.speed / 100;
     saveSong();
-    toast(trainer.speed >= t.target ? `Hedef hıza ulaştın: %${trainer.speed}` : `Hız %${trainer.speed}`);
+    const v = fmtSp(trainer.speed);
+    if (trainer.speed >= t.target) toast(cur.ex ? `Hedef tempoya ulaştın: ${v}` : `Hedef hıza ulaştın: ${v}`);
+    else toast(cur.ex ? `Tempo ${v}` : `Hız ${v}`);
   }
   updateSpeedUi();
 }
@@ -687,15 +804,28 @@ $('#p-speed').addEventListener('click', (e) => {
 });
 $('#spRange').addEventListener('input', (e) => setSpeed(Number(e.target.value), true));
 $('#metro').addEventListener('change', (e) => {
-  prefs.metro = e.target.checked;
+  prefs[metroKey()] = e.target.checked;
   savePrefs();
-  if (api) api.metronomeVolume = prefs.metro ? 1 : 0;
+  if (api) api.metronomeVolume = metroVolume();
+  updateSpeedUi();
+});
+$('#metroVol').addEventListener('input', (e) => {
+  prefs.metroVol = clamp(Number(e.target.value) || 100, 20, 200);
+  savePrefs();
+  if (api) api.metronomeVolume = metroVolume();
 });
 $('#countIn').addEventListener('change', (e) => {
-  prefs.countIn = e.target.checked;
+  prefs[countKey()] = e.target.checked;
   savePrefs();
-  if (api) api.countInVolume = prefs.countIn ? 1 : 0;
+  if (api) api.countInVolume = prefs[countKey()] ? 1 : 0;
 });
+// Egzersizde tempoyu dokunarak bulma
+$('#tapBtn').addEventListener('click', tapper((bpm, n) => {
+  if (!cur?.ex) return;
+  if (bpm == null) { toast('Tempoda dokunmaya devam et', 1500); return; }
+  setSpeed(bpm);
+  if (n >= 3) toast(`Tempo ${bpm} BPM`, 1200);
+}, { min: EX_BPM_MIN, max: EX_BPM_MAX }));
 for (const id of ['#trStart', '#trTarget', '#trStep', '#trEvery']) {
   $(id).addEventListener('change', () => { if (cur) readTrainerInputs(); });
 }
@@ -712,7 +842,10 @@ function applyLoop() {
     const r = new at.synth.PlaybackRange();
     r.startTick = tc.getMasterBarStart(mbs[L.from]);
     r.endTick = tc.getMasterBarStart(mbs[L.to]) + mbs[L.to].calculateDuration() - 1;
-    api.playbackRange = r;
+    // Yeni nota henüz çizilmeden (playerReady çizimden önce gelebiliyor) alphaTab seçimi eski
+    // çizimde arıyor ve hata veriyor. Aralık çalara o noktadan önce yazılıyor; vurgu da
+    // postRenderFinished'da highlightLoop ile çiziliyor. Bu yüzden hatayı yutmak yeterli.
+    try { api.playbackRange = r; } catch { /* yukarıya bak */ }
     api.isLooping = true;
   } else {
     api.playbackRange = null;
@@ -731,7 +864,9 @@ function highlightLoop() {
   const v2 = bars?.[L.to]?.voices[0];
   const first = v1?.beats[0];
   const last = v2?.beats[v2.beats.length - 1];
-  if (first && last) api.highlightPlaybackRange(first, last);
+  // Çizim henüz yeni notaya ait değilse bekle (postRenderFinished yeniden çağırır)
+  if (!first || !last || !api.boundsLookup.findBeat(first) || !api.boundsLookup.findBeat(last)) return;
+  api.highlightPlaybackRange(first, last);
 }
 
 // alphaTab notaya dokununca seçimi siler; döngü açıksa geri koyarız ve dokunulan yer döngünün
@@ -890,6 +1025,7 @@ function showTrack(i) {
   cur.s.track = i;
   saveSong();
   applyDisplay();
+  resetSelection(score.tracks[i]);
   api.renderTracks([score.tracks[i]]);
   updateMixUi();
   updateViewUi();
@@ -1018,11 +1154,12 @@ $('#btnStart').addEventListener('click', () => {
   if (cur?.s.loop.on && api.playbackRange) api.tickPosition = api.playbackRange.startTick;
   else { stop(); curBar = 0; updateBarLabel(); }
 });
-// Kütüphaneden açıldıysa geri düğmesi tarayıcı geçmişini kullanır (Android geri tuşuyla aynı davranır).
-let cameFromLibrary = false;
+// Listeden açıldıysa geri düğmesi tarayıcı geçmişini kullanır (Android geri tuşuyla aynı davranır).
+// Şarkı kütüphaneye, egzersiz egzersiz listesine döner.
+let cameFromList = false;
 $('#btnBack').addEventListener('click', () => {
-  if (cameFromLibrary) history.back();
-  else location.hash = '#/';
+  if (cameFromList) history.back();
+  else location.hash = cur?.ex ? '#/egzersiz' : '#/';
 });
 
 const seek = $('#seek');
@@ -1036,6 +1173,11 @@ seek.addEventListener('change', () => {
 });
 
 addEventListener('keydown', (e) => {
+  if (!$('#metroView').hidden && e.key === ' ' && !e.target.closest('input, select, textarea, dialog, button')) {
+    e.preventDefault();
+    toggleMetro();
+    return;
+  }
   if ($('#playerView').hidden || !api) return;
   if (e.target.closest('input, select, textarea, dialog') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === ' ' || e.key === 'PageDown' || e.key === 'MediaPlayPause') {
@@ -1063,7 +1205,161 @@ function releaseWake() {
   wakeLock = null;
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && playing) requestWake();
+  if (!document.hidden && (playing || metro.running)) requestWake();
+});
+
+// ---------------------------------------------------------------- egzersizler
+const exInst = () => prefs.exInst || (prefs.instrument === 'davul' ? 'davul' : 'gitar');
+let exProgress = new Map();
+
+async function showExercises() {
+  showView('exView');
+  document.title = 'Egzersizler · Tab-to-Play';
+  renderExList();
+  try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
+  renderExList();
+}
+
+function renderExList() {
+  const inst = exInst();
+  const level = prefs.exLevel;
+  $$('#segExInst button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === inst)));
+  $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
+  const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
+  $('#exList').replaceChildren(...list.map((x) => {
+    const last = exProgress.get(x.id)?.s?.speed;
+    const meta = el('span', { class: 'ex-meta' }, el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
+    if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
+    const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
+      el('span', { class: 'ex-title', text: x.title }),
+      el('span', { class: 'ex-desc-l', text: x.desc }),
+      meta);
+    if (last) {
+      const pct = clamp(Math.round(((last - x.min) / (x.max - x.min)) * 100), 0, 100);
+      main.append(el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%` })));
+    }
+    return el('li', { class: 'ex-item' }, main);
+  }));
+}
+
+$('#btnEx').addEventListener('click', () => { location.hash = '#/egzersiz'; });
+$('#exBack').addEventListener('click', () => {
+  if (lastView === 'exlist' && cameToExFrom === 'lib') history.back();
+  else location.hash = '#/';
+});
+$('#segExInst').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.exInst = v;
+  savePrefs();
+  renderExList();
+});
+$('#segExLevel').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.exLevel = v;
+  savePrefs();
+  renderExList();
+});
+$('#exList').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-id]')?.dataset.id;
+  if (id) location.hash = `#/egzersiz/${id}`;
+});
+
+// ---------------------------------------------------------------- tek başına metronom
+const metro = new Metronome();
+window.ttpMetro = metro; // testler için
+
+function applyMetroPrefs() {
+  metro.bpm = clamp(Math.round(prefs.mBpm) || 80, EX_BPM_MIN, EX_BPM_MAX);
+  metro.beats = clamp(Math.round(prefs.mBeats) || 4, 2, 7);
+  metro.sub = clamp(Math.round(prefs.mSub) || 1, 1, 4);
+  metro.accent = !!prefs.mAccent;
+  metro.vol = clamp(prefs.mVol, 10, 100) / 100;
+}
+
+function updateMetroUi() {
+  $('#mBpm').textContent = metro.bpm;
+  $('#mRange').value = metro.bpm;
+  $$('#segBeats button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.beats)));
+  $$('#segSub button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.sub)));
+  $('#mAccent').checked = metro.accent;
+  $('#mVol').value = Math.round(metro.vol * 100);
+  $('use', $('#mPlay')).setAttribute('href', metro.running ? '#i-pause' : '#i-play');
+  $('#mPlay span').textContent = metro.running ? 'Durdur' : 'Başlat';
+  $('#mPlay').setAttribute('aria-pressed', String(metro.running));
+  const dots = $('#mBeats');
+  if (dots.children.length !== metro.beats) {
+    dots.replaceChildren(...Array.from({ length: metro.beats }, (_, i) => el('i', { class: i === 0 ? 'first' : '' })));
+  }
+}
+
+metro.onBeat = (beat) => {
+  [...$('#mBeats').children].forEach((d, i) => d.classList.toggle('on', i === beat));
+};
+
+function showMetronome() {
+  showView('metroView');
+  document.title = 'Metronom · Tab-to-Play';
+  applyMetroPrefs();
+  updateMetroUi();
+}
+
+function setMetroBpm(v) {
+  prefs.mBpm = clamp(Math.round(v), EX_BPM_MIN, EX_BPM_MAX);
+  savePrefs();
+  applyMetroPrefs();
+  updateMetroUi();
+}
+
+function toggleMetro() {
+  metro.toggle();
+  if (metro.running) requestWake(); else releaseWake();
+  updateMetroUi();
+}
+
+$('#btnMetro').addEventListener('click', () => { location.hash = '#/metronom'; });
+$('#mBack').addEventListener('click', () => {
+  if (lastView === 'metro' && cameToMetroFrom === 'exlist') history.back();
+  else location.hash = '#/egzersiz';
+});
+$('#mPlay').addEventListener('click', toggleMetro);
+$('#metroView').addEventListener('click', (e) => {
+  const d = e.target.closest('[data-mb]')?.dataset.mb;
+  if (d) setMetroBpm(metro.bpm + Number(d));
+});
+$('#mRange').addEventListener('input', (e) => setMetroBpm(Number(e.target.value)));
+$('#mTap').addEventListener('click', tapper((bpm) => {
+  if (bpm == null) { toast('Tempoda dokunmaya devam et', 1500); return; }
+  setMetroBpm(bpm);
+}, { min: EX_BPM_MIN, max: EX_BPM_MAX }));
+$('#segBeats').addEventListener('click', (e) => {
+  const v = Number(e.target.closest('button')?.dataset.v);
+  if (!v) return;
+  prefs.mBeats = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
+$('#segSub').addEventListener('click', (e) => {
+  const v = Number(e.target.closest('button')?.dataset.v);
+  if (!v) return;
+  prefs.mSub = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
+$('#mAccent').addEventListener('change', (e) => {
+  prefs.mAccent = e.target.checked;
+  savePrefs();
+  applyMetroPrefs();
+});
+$('#mVol').addEventListener('input', (e) => {
+  prefs.mVol = Number(e.target.value);
+  savePrefs();
+  applyMetroPrefs();
 });
 
 // ---------------------------------------------------------------- ayarlar ve ilk açılış
@@ -1104,12 +1400,27 @@ $('#instGrid').addEventListener('click', (e) => {
 
 // ---------------------------------------------------------------- yönlendirme
 let lastView = null;
+let cameToExFrom = null; // egzersiz listesine nereden gelindi (geri düğmesi için)
+let cameToMetroFrom = null;
 async function route() {
-  const m = location.hash.match(/^#\/sarki\/([\w-]+)/);
-  if (m) {
-    cameFromLibrary = lastView === 'lib';
+  const h = location.hash;
+  let m;
+  if ((m = h.match(/^#\/sarki\/([\w-]+)/))) {
+    cameFromList = lastView === 'lib';
     lastView = 'player';
     await openSong(m[1]);
+  } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {
+    cameFromList = lastView === 'exlist';
+    lastView = 'player';
+    await openExercise(m[1]);
+  } else if (/^#\/egzersiz\/?$/.test(h)) {
+    if (lastView !== 'player' && lastView !== 'metro') cameToExFrom = lastView;
+    lastView = 'exlist';
+    await showExercises();
+  } else if (/^#\/metronom\/?$/.test(h)) {
+    cameToMetroFrom = lastView;
+    lastView = 'metro';
+    showMetronome();
   } else {
     lastView = 'lib';
     await showLibrary();

@@ -10,6 +10,8 @@ Gitar tabı ve davul notası çalar. Guitar Pro ve MusicXML dosyalarını açar,
 - **Hız antrenörü:** döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar, örneğin %60'tan %100'e 5'er 5'er.
 - **Partiler:** her parti için Sessiz, Solo ve ses düzeyi. "Kendi partimi sessize al" ile şarkının geri kalanına eşlik edersin.
 - **Metronom** ve başlamadan önce bir ölçü sayma.
+- **Egzersiz modu:** kütüphanedeki **Egzersiz** düğmesi. Elektro gitar ve davul için Başlangıç / Orta / İleri seviyede 26 egzersiz (açık teller, kromatik, gamlar, pentatonik, triole, legato, palm mute, sweep; davulda rock ritimleri, shuffle, fill'ler, paradiddle, ghost note, çift pedal). Egzersiz notasıyla ve imleçle birlikte döngüde çalar. Tempo doğrudan BPM ile ayarlanır (30–240, ±1/±5, hazır tempolar, vuruşla tempo bulma), metronom ve sayma açık gelir, metronomun sesi ayarlanır, egzersizin sesi kapatılıp yalnızca metronomla çalınabilir. Hız antrenörü BPM ile çalışır (ör. 60'tan 100'e her iki turda +5). Her egzersizin son temposu saklanır ve listede görünür.
+- **Tek başına metronom:** egzersiz ekranından. 30–240 BPM, ölçüdeki vuruş (2–7), bölüm (dörtlük, sekizlik, triole, 16'lık), ilk vuruş vurgusu, ses, vuruşla tempo bulma, vuruş ışıkları. Boşluk tuşu başlatır/durdurur.
 - **Görünüm:** Tab / Nota / İkisi, sayfa ya da tek satır düzeni, yakınlaştırma, çalarken otomatik kaydırma, ekranı açık tutma.
 - **Şarkıya özel ayarlar saklanır:** hız, döngü, sessiz/solo partiler ve seçili parti, şarkıyı tekrar açınca kaldığı gibi gelir.
 - **Tab bul:** şarkı adını (ve istersen sanatçıyı) yaz; Ultimate Guitar'ın kendi araması ya da GProTab, 911tabs ve bütün web için Guitar Pro araması tarayıcıda yeni sekmede açılır. İndirdiğin dosyayı **Şarkı ekle** ile eklersin.
