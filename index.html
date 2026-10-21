@@ -35,6 +35,7 @@
   <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></symbol>
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 5h6v2H7v10h10v-4h2v6H5z"/></symbol>
+  <symbol id="i-metro" viewBox="0 0 24 24"><path d="M9.2 3h5.6l4.4 18H4.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6.6 16h10.8M12 16l5-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
 </svg>
 
@@ -42,6 +43,7 @@
 <section id="libView" class="view" hidden>
   <header class="topbar">
     <h1 class="brand"><img src="icons/icon.svg" alt="" width="28" height="28">Tab-to-Play</h1>
+    <button id="btnEx" class="chip ex-chip" type="button"><svg class="ic"><use href="#i-metro"/></svg>Egzersiz</button>
     <button id="btnSettings" class="icon-btn" type="button" aria-label="Ayarlar"><svg class="ic"><use href="#i-gear"/></svg></button>
   </header>
   <div class="lib-tools" id="libTools">
@@ -71,10 +73,67 @@
   </div>
 </section>
 
+<!-- Egzersizler -->
+<section id="exView" class="view" hidden>
+  <header class="topbar">
+    <button id="exBack" class="icon-btn" type="button" aria-label="Kütüphaneye dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Egzersizler</h1>
+  </header>
+  <div class="ex-wrap">
+    <div class="ex-tools">
+      <div class="seg wide" id="segExInst" role="group" aria-label="Enstrüman">
+        <button type="button" data-v="gitar">🎸 Elektro gitar</button><button type="button" data-v="davul">🥁 Davul</button>
+      </div>
+      <div class="seg wide" id="segExLevel" role="group" aria-label="Seviye">
+        <button type="button" data-v="baslangic">Başlangıç</button><button type="button" data-v="orta">Orta</button><button type="button" data-v="ileri">İleri</button>
+      </div>
+    </div>
+    <button id="btnMetro" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-metro"/></svg>
+      <span><b>Metronom</b><small>Notasız, tek başına tempo tut: ölçü, bölüm, vurgu, vuruşla tempo.</small></span>
+    </button>
+    <p class="muted small">Egzersiz döngüde çalar, metronom açık gelir. Önerilen en düşük tempoda temiz çalabildiğinde tempoyu biraz artır; <b>Tempo</b> panelindeki antrenör bunu senin yerine yapar.</p>
+    <ul id="exList" class="ex-list"></ul>
+  </div>
+</section>
+
+<!-- Metronom -->
+<section id="metroView" class="view" hidden>
+  <header class="topbar">
+    <button id="mBack" class="icon-btn" type="button" aria-label="Egzersizlere dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Metronom</h1>
+  </header>
+  <div class="metro">
+    <div class="m-beats" id="mBeats" aria-hidden="true"></div>
+    <div class="m-bpm"><output id="mBpm">80</output><span>BPM</span></div>
+    <div class="m-step">
+      <button type="button" class="btn" data-mb="-5" aria-label="5 BPM yavaşlat">−5</button>
+      <button type="button" class="btn" data-mb="-1" aria-label="1 BPM yavaşlat">−1</button>
+      <button type="button" class="btn" data-mb="1" aria-label="1 BPM hızlandır">+1</button>
+      <button type="button" class="btn" data-mb="5" aria-label="5 BPM hızlandır">+5</button>
+    </div>
+    <input id="mRange" type="range" min="30" max="240" step="1" value="80" aria-label="Tempo (BPM)">
+    <button id="mPlay" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Başlat</span></button>
+    <button id="mTap" class="btn" type="button">Vuruşla ayarla <small class="muted">(tempoda birkaç kez dokun)</small></button>
+    <div class="field"><span>Ölçüdeki vuruş</span>
+      <div class="seg wide" id="segBeats" role="group" aria-label="Ölçüdeki vuruş">
+        <button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5</button><button type="button" data-v="6">6</button><button type="button" data-v="7">7</button>
+      </div>
+    </div>
+    <div class="field"><span>Bölüm</span>
+      <div class="seg wide" id="segSub" role="group" aria-label="Vuruşun bölümü">
+        <button type="button" data-v="1">Dörtlük</button><button type="button" data-v="2">Sekizlik</button><button type="button" data-v="3">Triole</button><button type="button" data-v="4">16'lık</button>
+      </div>
+    </div>
+    <label class="switch"><input type="checkbox" id="mAccent"><span>İlk vuruş vurgulu</span></label>
+    <label class="mix-vol m-vol"><span>Ses</span><input id="mVol" type="range" min="10" max="100" step="5" aria-label="Metronom sesi"></label>
+  </div>
+</section>
+
 <!-- Çalar -->
 <section id="playerView" class="view player" hidden>
   <header class="topbar">
-    <button id="btnBack" class="icon-btn" type="button" aria-label="Kütüphaneye dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <button id="btnBack" class="icon-btn" type="button" aria-label="Geri dön"><svg class="ic"><use href="#i-back"/></svg></button>
     <div class="song-head"><b id="pTitle"></b><span id="pArtist"></span></div>
     <button id="btnTrack" class="chip track-chip" type="button" data-panel="mix" aria-label="Parti seç"></button>
   </header>
@@ -85,29 +144,29 @@
   <footer class="controls" id="controls">
     <!-- Paneller -->
     <div id="p-speed" class="panel" hidden role="dialog" aria-label="Hız">
-      <div class="panel-head"><h3>Hız ve tempo</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <div class="panel-head"><h3><span class="song-only">Hız ve tempo</span><span class="ex-only">Tempo ve metronom</span></h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <p class="ex-only ex-desc" id="exDesc"></p>
       <div class="stepper big">
+        <button type="button" class="btn ex-only" data-sp="-1" aria-label="1 BPM yavaşlat">−1</button>
         <button type="button" class="btn" data-sp="-5" aria-label="Yavaşlat">−</button>
         <output id="spOut">%100</output>
         <button type="button" class="btn" data-sp="5" aria-label="Hızlandır">+</button>
+        <button type="button" class="btn ex-only" data-sp="1" aria-label="1 BPM hızlandır">+1</button>
       </div>
       <input id="spRange" type="range" min="25" max="150" step="5" value="100" aria-label="Hız">
-      <div class="presets">
-        <button type="button" class="chip" data-spv="50">%50</button>
-        <button type="button" class="chip" data-spv="75">%75</button>
-        <button type="button" class="chip" data-spv="90">%90</button>
-        <button type="button" class="chip" data-spv="100">%100</button>
-      </div>
+      <div class="presets" id="spPresets"></div>
       <p class="muted small" id="bpmInfo"></p>
+      <button type="button" class="btn ex-only tap-btn" id="tapBtn">Vuruşla ayarla <small class="muted">(tempoda birkaç kez dokun)</small></button>
       <label class="switch"><input type="checkbox" id="metro"><span>Metronom</span></label>
+      <label class="mix-vol metro-vol"><span>Metronom sesi</span><input id="metroVol" type="range" min="20" max="200" step="10" aria-label="Metronom sesi"></label>
       <label class="switch"><input type="checkbox" id="countIn"><span>Başlamadan önce bir ölçü say</span></label>
       <details class="trainer" id="trainerBox">
         <summary>Hız antrenörü</summary>
-        <p class="muted small">Döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar.</p>
+        <p class="muted small"><span class="song-only">Döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar.</span><span class="ex-only">Egzersizi her turda (ya da birkaç turda bir) biraz hızlandırarak çalar, hedef tempoda durur.</span></p>
         <div class="tr-grid">
-          <label>Başlangıç %<input id="trStart" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
-          <label>Hedef %<input id="trTarget" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
-          <label>Artış %<input id="trStep" type="number" inputmode="numeric" min="1" max="50"></label>
+          <label>Başlangıç <span class="u">%</span><input id="trStart" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
+          <label>Hedef <span class="u">%</span><input id="trTarget" type="number" inputmode="numeric" min="25" max="150" step="5"></label>
+          <label>Artış <span class="u">%</span><input id="trStep" type="number" inputmode="numeric" min="1" max="50"></label>
           <label>Kaç turda bir<input id="trEvery" type="number" inputmode="numeric" min="1" max="20"></label>
         </div>
         <button id="trBtn" type="button" class="btn primary">Antrenörü başlat</button>
@@ -132,9 +191,9 @@
     </div>
 
     <div id="p-mix" class="panel" hidden role="dialog" aria-label="Partiler">
-      <div class="panel-head"><h3>Partiler</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
-      <label class="switch mine"><input type="checkbox" id="muteMine"><span>Kendi partimi sessize al <small class="muted">(şarkının geri kalanıyla sen çal)</small></span></label>
-      <p class="muted small">Ekranda gösterilecek partiyi soldan seç. Sessiz ve Solo düğmeleri yalnızca sesi etkiler.</p>
+      <div class="panel-head"><h3><span class="song-only">Partiler</span><span class="ex-only">Ses</span></h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <label class="switch mine"><input type="checkbox" id="muteMine"><span class="song-only">Kendi partimi sessize al <small class="muted">(şarkının geri kalanıyla sen çal)</small></span><span class="ex-only">Egzersizin sesini kapat <small class="muted">(yalnızca metronomla çal)</small></span></label>
+      <p class="muted small song-only">Ekranda gösterilecek partiyi soldan seç. Sessiz ve Solo düğmeleri yalnızca sesi etkiler.</p>
       <ul id="mixList" class="mix-list"></ul>
     </div>
 
@@ -168,7 +227,7 @@
       <button id="btnPlay" class="ctl play" type="button" aria-label="Çal" disabled><svg class="ic"><use href="#i-play"/></svg></button>
       <button class="ctl" type="button" data-panel="speed" aria-expanded="false"><svg class="ic"><use href="#i-speed"/></svg><span id="lblSpeed">%100</span></button>
       <button class="ctl" type="button" data-panel="loop" aria-expanded="false"><svg class="ic"><use href="#i-loop"/></svg><span id="lblLoop">Döngü</span></button>
-      <button class="ctl" type="button" data-panel="mix" aria-expanded="false"><svg class="ic"><use href="#i-mix"/></svg><span>Partiler</span></button>
+      <button class="ctl" type="button" data-panel="mix" aria-expanded="false"><svg class="ic"><use href="#i-mix"/></svg><span class="song-only">Partiler</span><span class="ex-only">Ses</span></button>
       <button class="ctl" type="button" data-panel="view" aria-expanded="false"><svg class="ic"><use href="#i-view"/></svg><span>Görünüm</span></button>
     </div>
   </footer>

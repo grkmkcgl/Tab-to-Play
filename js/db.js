@@ -1,9 +1,13 @@
 // Şarkılar cihazda IndexedDB'de durur:
 //   songs: şarkı bilgisi ve şarkıya özel ayarlar (hız, döngü, sessiz partiler…)
 //   files: dosyanın kendisi (ArrayBuffer), listeyi açarken hepsini okumamak için ayrı tutulur.
+// Egzersiz ilerlemesi (tempo, döngü, antrenör) ayrı bir veritabanında: tab-to-play-egzersiz / progress.
+// Ayrı tutuldu ki şarkı veritabanının sürümü yükseltilmesin (eski sürüm başka sekmede açıksa
+// yükseltme bekler ve uygulama açılmaz).
 const DB_NAME = 'tab-to-play';
 const DB_VERSION = 1;
 let dbPromise = null;
+let exPromise = null;
 
 function openDb() {
   if (!dbPromise) {
@@ -20,6 +24,20 @@ function openDb() {
     });
   }
   return dbPromise;
+}
+
+function openExDb() {
+  if (!exPromise) {
+    exPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open('tab-to-play-egzersiz', 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains('progress')) req.result.createObjectStore('progress', { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return exPromise;
 }
 
 function done(tx) {
@@ -68,6 +86,21 @@ export const db = {
     const tx = d.transaction(['songs', 'files'], 'readwrite');
     tx.objectStore('songs').delete(id);
     tx.objectStore('files').delete(id);
+    return done(tx);
+  },
+  // Egzersiz ilerlemesi: { id, s, opened }
+  async allEx() {
+    const d = await openExDb();
+    return result(d.transaction('progress').objectStore('progress').getAll());
+  },
+  async getEx(id) {
+    const d = await openExDb();
+    return result(d.transaction('progress').objectStore('progress').get(id));
+  },
+  async putEx(rec) {
+    const d = await openExDb();
+    const tx = d.transaction('progress', 'readwrite');
+    tx.objectStore('progress').put(rec);
     return done(tx);
   },
 };
