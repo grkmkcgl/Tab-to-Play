@@ -123,6 +123,7 @@ a { color: var(--accent); }
   padding: 12px 12px calc(14px + var(--safe-b));
   background: linear-gradient(transparent, var(--bg) 45%);
   pointer-events: none;
+  gap: 10px;
 }
 .fab { pointer-events: auto; min-height: 52px; padding: 10px 26px; border-radius: 999px; font-size: 17px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 
@@ -284,3 +285,22 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
   .ctl.play { width: 48px; height: 48px; min-width: 48px; }
   .panel { max-height: 70vh; }
 }
+
+/* Tab bul */
+.fab-2 { background: var(--panel-2); color: var(--text); border-color: var(--line); }
+.find-q { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; color: var(--muted); font-size: 14px; }
+.find-q input {
+  min-height: 48px; padding: 8px 12px; font-size: 17px; color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2);
+}
+.find-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+.find-site {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 60px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2); color: var(--text); text-decoration: none;
+}
+.find-site span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.find-site small { color: var(--muted); font-size: 13px; }
+.find-site .ic { color: var(--accent); }
+.find-site:active { transform: scale(.98); }
+.find-site[aria-disabled="true"] { opacity: .45; pointer-events: none; }

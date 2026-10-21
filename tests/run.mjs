@@ -266,6 +266,46 @@ test('kütüphane: Türkçe arama, favori, sıralama, silme onayı', async (b, t
   await app.close();
 });
 
+test('tab bul: site aramaları yeni sekmede, yalnızca şarkı adıyla', async (b, t) => {
+  const app = await App.open(b, t, { viewport: { width: 360, height: 740 } });
+  const p = app.page;
+  // İki alt düğme dar ekrana sığar
+  const fit = await app.ev(() => [...document.querySelectorAll('.fab')].map((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }));
+  eq(fit, [true, true], 'Tab bul ve Şarkı ekle ekrana sığmalı');
+  await app.click('#btnFind');
+  assert(await p.evaluate(() => document.querySelector('#findDlg').open), 'pencere açılmadı');
+  assert(await p.isVisible('#findEmpty'), 'boşken uyarı görünmeli');
+  eq(await app.ev(() => [...document.querySelectorAll('#findList a')].map((a) => [a.hasAttribute('href'), a.getAttribute('aria-disabled')])),
+    [[false, 'true'], [false, 'true'], [false, 'true'], [false, 'true']], 'boşken bağlantılar kapalı');
+  await p.fill('#findQ', '  Akşam  Şarkısı Örnek Grup ');
+  const links = await app.ev(() => [...document.querySelectorAll('#findList a')].map((a) => ({ site: a.dataset.site, href: a.href, target: a.target, rel: a.rel })));
+  const ddg = (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}`;
+  eq(links.map((l) => l.href), [
+    ddg('Akşam Şarkısı Örnek Grup guitar pro site:ultimate-guitar.com'),
+    ddg('Akşam Şarkısı Örnek Grup site:gprotab.net'),
+    ddg('Akşam Şarkısı Örnek Grup guitar pro site:911tabs.com'),
+    ddg('Akşam Şarkısı Örnek Grup guitar pro tab gp5'),
+  ], 'arama adresleri');
+  assert(links.every((l) => l.target === '_blank' && l.rel.includes('noreferrer') && l.rel.includes('noopener')), 'yeni sekme, referrer yok');
+  assert(!(await p.isVisible('#findEmpty')), 'uyarı kaybolmalı');
+  // Dokununca yeni sekmede açılır (dış site burada taklit edilir)
+  await app.ctx.route('https://duckduckgo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'ok' }));
+  const [popup] = await Promise.all([app.ctx.waitForEvent('page'), app.click('#findList a[data-site="gprotab"]')]);
+  eq(popup.url(), ddg('Akşam Şarkısı Örnek Grup site:gprotab.net'), 'açılan sekme');
+  await popup.close();
+  app.external = app.external.filter((u) => !u.startsWith('https://duckduckgo.com/'));
+  assert(await p.evaluate(() => !location.href.includes('duckduckgo')), 'uygulama sayfası yerinde kalmalı');
+  // Kütüphane aramasındaki yazı pencereye gelir
+  await p.click('#findDlg [data-close-dlg]');
+  await app.addFiles('test-sarki.gp', 'baska.gp');
+  await p.waitForFunction(() => document.querySelectorAll('#songList .song').length === 2);
+  await p.fill('#q', 'Paranoid');
+  await app.click('#btnFind');
+  eq(await p.inputValue('#findQ'), 'Paranoid', 'kütüphane aramasından gelmeli');
+  assert((await app.ev(() => document.querySelector('#findList a').href)).includes('Paranoid'), 'bağlantı güncellenmeli');
+  await app.close();
+});
+
 test('paylaş: paylaşım menüsü yoksa dosya aynen indirilir', async (b, t) => {
   const app = await App.open(b, t);
   await app.addFiles('test-sarki.gp', 'baska.gp');

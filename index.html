@@ -32,6 +32,8 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18.5" r="2"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 5h6v2H7v10h10v-4h2v6H5z"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
 </svg>
 
@@ -55,13 +57,14 @@
   <div id="welcome" class="welcome" hidden>
     <h2>Kütüphanen boş</h2>
     <ol>
-      <li>Çalmak istediğin şarkının <b>Guitar Pro</b> (.gp, .gp5, .gpx…) ya da <b>MusicXML</b> dosyasını indir. Bu dosyalarda gitar, bas ve davul partileri ritimleriyle birlikte bulunur.</li>
+      <li>Çalmak istediğin şarkının <b>Guitar Pro</b> (.gp, .gp5, .gpx…) ya da <b>MusicXML</b> dosyasını indir. Bu dosyalarda gitar, bas ve davul partileri ritimleriyle birlikte bulunur. Aşağıdaki <b>Tab bul</b> düğmesi şarkıyı tab sitelerinde arar.</li>
       <li>Aşağıdaki <b>Şarkı ekle</b> düğmesiyle dosyayı seç. iPhone ve iPad'de indirilenler genelde <i>Dosyalar → İndirilenler</i> klasöründedir.</li>
       <li>Android'de uygulamayı ana ekrana ekledikten sonra dosyayı <b>Paylaş</b> menüsünden doğrudan Tab-to-Play'e de gönderebilirsin.</li>
     </ol>
     <button id="btnDemo" class="btn" type="button">Örnek şarkıyı ekle</button>
   </div>
   <div class="fab-wrap">
+    <button id="btnFind" class="btn fab fab-2" type="button"><svg class="ic"><use href="#i-search"/></svg>Tab bul</button>
     <label class="btn primary fab" for="fileIn"><svg class="ic"><use href="#i-plus"/></svg>Şarkı ekle</label>
     <input id="fileIn" type="file" multiple hidden>
   </div>
@@ -181,6 +184,22 @@
   </div>
 </dialog>
 
+<dialog id="findDlg" class="dlg">
+  <div class="panel-head"><h2>Tab bul</h2><button class="icon-btn" type="button" data-close-dlg aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+  <label class="find-q"><span>Şarkı ve sanatçı</span>
+    <input id="findQ" type="search" placeholder="örn. Nothing Else Matters Metallica" autocomplete="off" enterkeyhint="search">
+  </label>
+  <p id="findEmpty" class="muted small">Önce şarkının adını yaz.</p>
+  <div class="find-list" id="findList">
+    <a class="find-site" data-site="ug" target="_blank" rel="noopener noreferrer"><span><b>Ultimate Guitar</b><small>En büyük arşiv. Sonuçlarda türü “Guitar Pro” olanları aç.</small></span><svg class="ic"><use href="#i-open"/></svg></a>
+    <a class="find-site" data-site="gprotab" target="_blank" rel="noopener noreferrer"><span><b>GProTab</b><small>Yalnızca Guitar Pro dosyaları, doğrudan iner.</small></span><svg class="ic"><use href="#i-open"/></svg></a>
+    <a class="find-site" data-site="911tabs" target="_blank" rel="noopener noreferrer"><span><b>911tabs</b><small>Birçok tab sitesinde birden arar.</small></span><svg class="ic"><use href="#i-open"/></svg></a>
+    <a class="find-site" data-site="web" target="_blank" rel="noopener noreferrer"><span><b>Bütün web</b><small>Başka sitelerde de “guitar pro” dosyası arar.</small></span><svg class="ic"><use href="#i-open"/></svg></a>
+  </div>
+  <p class="muted small">Arama tarayıcıda yeni sekmede açılır; arama motoruna yalnızca yazdığın şarkı adı gider, kütüphanen değil. İndirdiğin dosyayı sonra <b>Şarkı ekle</b> ile ekle: iPhone/iPad'de <i>Dosyalar → İndirilenler</i>'de durur, Android'de <b>Paylaş → Tab-to-Play</b> ile de gönderebilirsin.</p>
+  <p class="muted small">Davul partisi Guitar Pro dosyasının içinde gelir; ayrıca davul tabı aramana gerek yok.</p>
+</dialog>
+
 <dialog id="settingsDlg" class="dlg">
   <div class="panel-head"><h2>Ayarlar</h2><button class="icon-btn" type="button" data-close-dlg aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
   <div class="field"><span>Enstrümanım</span>
@@ -190,7 +209,7 @@
   </div>
   <h3>Şarkı nasıl eklenir?</h3>
   <ul class="help">
-    <li>Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml) dosyaları açılır.</li>
+    <li>Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml) dosyaları açılır. Kütüphanedeki <b>Tab bul</b> şarkıyı tab sitelerinde arar.</li>
     <li>iPhone/iPad: Safari'de indirdiğin dosya <i>Dosyalar → İndirilenler</i>'e düşer; kütüphanede <b>Şarkı ekle</b> ile seç.</li>
     <li>Android: dosyayı <b>Paylaş</b> menüsünden Tab-to-Play'e gönder ya da <b>Şarkı ekle</b> ile seç.</li>
     <li>Bilgisayarda dosyaları sayfanın üzerine sürükleyip bırakabilirsin.</li>

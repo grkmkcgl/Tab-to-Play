@@ -288,6 +288,39 @@ async function addDemo() {
 $('#btnDemo').addEventListener('click', addDemo);
 $('#btnDemo2').addEventListener('click', addDemo);
 
+// İnternette tab bulma: her site için DuckDuckGo'da site: filtreli arama, tarayıcıda yeni sekmede.
+// Uygulama bu sitelere kendisi bağlanmaz (CSP connect-src 'self' aynen kalır); bağlantı yalnızca
+// kullanıcı dokununca açılır ve arama motoruna yalnızca yazılan şarkı adı gider.
+const FIND_SITES = {
+  ug: (q) => `${q} guitar pro site:ultimate-guitar.com`,
+  gprotab: (q) => `${q} site:gprotab.net`,
+  '911tabs': (q) => `${q} guitar pro site:911tabs.com`,
+  web: (q) => `${q} guitar pro tab gp5`,
+};
+function findUrl(site, q) {
+  return `https://duckduckgo.com/?q=${encodeURIComponent(FIND_SITES[site](q))}`;
+}
+function updateFindLinks() {
+  const q = clean($('#findQ').value);
+  $$('#findList a').forEach((a) => {
+    if (q) a.href = findUrl(a.dataset.site, q); else a.removeAttribute('href');
+    a.setAttribute('aria-disabled', String(!q));
+  });
+  $('#findEmpty').hidden = !!q;
+}
+function openFind() {
+  const typed = $('#q').value.trim();
+  if (typed) $('#findQ').value = typed;
+  updateFindLinks();
+  $('#findDlg').showModal();
+  if (!$('#findQ').value) $('#findQ').focus();
+}
+$('#btnFind').addEventListener('click', openFind);
+$('#findQ').addEventListener('input', updateFindLinks);
+$('#findQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+$('#findDlg [data-close-dlg]').addEventListener('click', () => $('#findDlg').close());
+$('#findDlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
 // Sürükle-bırak (bilgisayar, iPad)
 let dragDepth = 0;
 addEventListener('dragenter', (e) => {

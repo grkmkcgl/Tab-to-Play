@@ -12,6 +12,7 @@ Gitar tabı ve davul notası çalar. Guitar Pro ve MusicXML dosyalarını açar,
 - **Metronom** ve başlamadan önce bir ölçü sayma.
 - **Görünüm:** Tab / Nota / İkisi, sayfa ya da tek satır düzeni, yakınlaştırma, çalarken otomatik kaydırma, ekranı açık tutma.
 - **Şarkıya özel ayarlar saklanır:** hız, döngü, sessiz/solo partiler ve seçili parti, şarkıyı tekrar açınca kaldığı gibi gelir.
+- **Tab bul:** şarkı adını yaz, Ultimate Guitar, GProTab, 911tabs ya da bütün web için Guitar Pro araması tarayıcıda yeni sekmede açılır. İndirdiğin dosyayı **Şarkı ekle** ile eklersin.
 - **Kütüphane:** arama (Türkçe karakterlere duyarsız), favoriler, sıralama, silme, paylaşma (dosyayı AirDrop, WhatsApp vb. ile gönderme).
 - **Klavye ve pedal:** Boşluk / PageDown çal-durdur, ← → ölçü değiştir, Home başa sar, + / − hız. Sayfa çevirme pedalları da çoğunlukla PageDown gönderir.
 
@@ -29,7 +30,7 @@ Denemek için kütüphane boşken (ya da Ayarlar'dan) **Örnek şarkıyı ekle**
 
 ## Gizlilik
 
-Şarkılar yalnızca cihazda (tarayıcının IndexedDB deposunda) saklanır, hiçbir sunucuya gönderilmez. Sayfadaki `Content-Security-Policy` uygulamanın kendi adresi dışına istek atılmasını engeller. Uygulama ilk açılıştan sonra internetsiz de çalışır.
+Şarkılar yalnızca cihazda (tarayıcının IndexedDB deposunda) saklanır, hiçbir sunucuya gönderilmez. Sayfadaki `Content-Security-Policy` uygulamanın kendi adresi dışına istek atılmasını engeller. **Tab bul** uygulamanın içinden hiçbir siteye bağlanmaz: yalnızca sen dokununca tarayıcıda yeni sekme açar ve arama motoruna (DuckDuckGo) yalnızca yazdığın şarkı adı gider. Uygulama ilk açılıştan sonra internetsiz de çalışır.
 
 ## Geliştirme
 
