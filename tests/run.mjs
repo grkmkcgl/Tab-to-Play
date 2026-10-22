@@ -409,6 +409,10 @@ test('döngü: ölçü aralığı, imleçten, dokunma, iki dokunuşla seçme, ka
   eq(await app.ev(() => ttpApi.isLooping), true, 'tekrar açık');
   // Klavyeyle 3. ölçüye git, "İmleçten" ile başlangıç yap
   await app.closePanels();
+  // Aralık atanınca alphaTab imleci başa alır; bu konum olayı geç gelirse ok tuşlarının
+  // gittiği ölçüyü ezer (CI'da görüldü). Önce o olayın gelip geçmesini bekle.
+  await app.page.waitForFunction(() => document.querySelector('#posBar').textContent === 'Ölçü 1/9');
+  await app.page.waitForTimeout(400);
   await app.page.keyboard.press('ArrowRight');
   await app.page.keyboard.press('ArrowRight');
   eq(await app.text('#posBar'), 'Ölçü 3/9', 'ok tuşları');
