@@ -624,13 +624,13 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
   assert((await app.exTitles()).includes('Shuffle (triole)'), 'davul orta');
   await app.click('#segExInst [data-v="gitar"]');
   const gitarO = await app.exTitles();
-  assert(gitarO.length === 5 && gitarO.includes('La minör pentatonik'), `gitar orta: ${gitarO}`);
+  assert(gitarO.length === 10 && gitarO.includes('La minör pentatonik') && gitarO.includes('Bend ve vibrato'), `gitar orta: ${gitarO}`);
   await app.click('#segExLevel [data-v="ileri"]');
   assert((await app.exTitles()).includes('Sweep arpej: Am – Dm – E'), 'gitar ileri');
-  // Her egzersiz tek bir enstrüman/seviye altında; toplam 26
+  // Her egzersiz tek bir enstrüman/seviye altında; toplam 58 (26 eski + 32 yeni)
   let total = 0;
   for (const inst of ['gitar', 'davul']) {
-    for (const lv of ['baslangic', 'orta', 'ileri']) {
+    for (const lv of ['baslangic', 'orta', 'ileri', 'olcu']) {
       await app.click(`#segExInst [data-v="${inst}"]`);
       await app.click(`#segExLevel [data-v="${lv}"]`);
       const n = (await app.exTitles()).length;
@@ -638,7 +638,7 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
       total += n;
     }
   }
-  eq(total, 26, 'toplam egzersiz');
+  eq(total, 58, 'toplam egzersiz');
   await app.click('#segExInst [data-v="gitar"]');
   await app.click('#segExLevel [data-v="ileri"]');
   await p.reload();
@@ -646,6 +646,50 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
   eq([await app.pressed('#segExInst'), await app.pressed('#segExLevel')], [['gitar'], ['ileri']], 'seçim kalıcı');
   await app.click('#exBack');
   await p.waitForSelector('#libView:not([hidden])');
+  await app.close();
+});
+
+test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 ölçüde BPM = sekizlik tık, ölçü değişimi', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  await app.click('#segExLevel [data-v="olcu"]');
+  const ts = await p.$$eval('#exList .ex-meta .ts', (els) => els.map((e) => e.textContent));
+  for (const x of ['3/4', '4/4', '5/8', '6/8', '7/8', '9/8', '12/8', '5/4']) assert(ts.includes(x), `${x} ölçüsü listede yok: ${ts}`);
+  eq(ts.length, (await app.exTitles()).length, 'her ölçü egzersizinde etiket');
+  // Eski seviyelerde ölçü etiketi yalnızca 4/4 olmayanlarda (Tel başına üç nota 3/4)
+  await app.click('#segExLevel [data-v="ileri"]');
+  eq(await p.$$eval('#exList .ex-meta .ts', (els) => els.map((e) => e.textContent)), ['3/4'], 'ileri seviyede etiket');
+  await app.click('#segExInst [data-v="davul"]');
+  await app.click('#segExLevel [data-v="olcu"]');
+  assert((await app.exTitles()).includes('7/8: 2 + 2 + 3'), 'davulda da ölçü egzersizi');
+
+  // 5/8: nota sekizlik = 100 yazılı, 140 BPM'de metronom dakikada 140 kez (her sekizlik) tıklar
+  await app.openEx('g-t5');
+  eq(await app.text('#pArtist'), 'Elektro gitar · 5/8 · Orta', 'başlık altı');
+  const info = await app.ev(() => ({
+    ts: ttpApi.score.masterBars.map((m) => `${m.timeSignatureNumerator}/${m.timeSignatureDenominator}`),
+    tempo: ttpApi.score.tempo,
+    speed: ttpApi.playbackSpeed,
+  }));
+  eq(info, { ts: ['5/8', '5/8', '5/8', '5/8'], tempo: 50, speed: 1.4 }, '5/8 bilgisi');
+  assert((await app.text('#exDesc')).includes('sekizlik'), 'tempo notu açıklamada');
+  await app.ev(() => { ttpApi.countInVolume = 0; });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 500, null, { timeout: 10000 });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 0);
+
+  // 4/4 egzersiz dörtlük = 100 yazılı kalır
+  await app.openEx('g-t2');
+  eq(await app.ev(() => [ttpApi.score.tempo, ttpApi.score.masterBars[0].timeSignatureNumerator]), [100, 4], '4/4 tempo');
+
+  // Ölçü değişimi: her ölçü kendi ölçü sayısıyla
+  await app.openEx('g-t12');
+  eq(await app.ev(() => ttpApi.score.masterBars.map((m) => `${m.timeSignatureNumerator}/${m.timeSignatureDenominator}`)), ['3/4', '4/4', '5/4', '4/4'], 'ölçü değişimi');
+  eq(await app.text('#pArtist'), 'Elektro gitar · 3/4 · 4/4 · 5/4 · İleri', 'karışık ölçü etiketi');
   await app.close();
 });
 
@@ -754,13 +798,13 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul ve triol
   await p.waitForSelector('#exView:not([hidden])');
   const ids = [];
   for (const inst of ['gitar', 'davul']) {
-    for (const lv of ['baslangic', 'orta', 'ileri']) {
+    for (const lv of ['baslangic', 'orta', 'ileri', 'olcu']) {
       await app.click(`#segExInst [data-v="${inst}"]`);
       await app.click(`#segExLevel [data-v="${lv}"]`);
       ids.push(...await p.$$eval('#exList [data-id]', (els) => els.map((e) => e.dataset.id)));
     }
   }
-  eq(ids.length, 26, 'egzersiz sayısı');
+  eq(ids.length, 58, 'egzersiz sayısı');
   for (const id of ids) {
     await app.openEx(id);
     const info = await app.ev(() => ({

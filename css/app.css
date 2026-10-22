@@ -335,6 +335,7 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .ex-desc-l { color: var(--muted); font-size: 14px; }
 .ex-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; color: var(--muted); }
 .ex-meta .last { color: var(--text); font-weight: 600; }
+.ex-meta .ts { color: var(--accent-ink); background: var(--accent); border-radius: 6px; padding: 0 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ex-prog { height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
 .ex-prog i { display: block; height: 100%; background: var(--accent); }
 .ex-desc { margin: 0 0 4px; font-size: 14px; color: var(--muted); }

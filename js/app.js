@@ -2,10 +2,10 @@
 // __SURUM__ yayınlanırken (tools/build.mjs) yapı numarasıyla değiştirilir. Sayfa, css ve betikler hep
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
-import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, EX_TEMPO, LEVELS, exerciseTex, findExercise } from './egzersiz.js?v=__SURUM__';
+import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -547,9 +547,9 @@ async function openExercise(id) {
     id,
     ex,
     title: ex.title,
-    artist: `${EX_INST[ex.inst]} · ${LEVELS[ex.level]}`,
+    artist: `${EX_INST[ex.inst]} · ${ex.level === 'olcu' ? `${tsLabel(ex)} · ${LEVELS[ex.diff]}` : LEVELS[ex.level]}`,
     file: '',
-    tempo: EX_TEMPO,
+    tempo: exTempo(ex),
     tracks: sc.tracks.map(trackInfo),
     s: saved?.s || {
       speed: ex.bpm,
@@ -1228,7 +1228,11 @@ function renderExList() {
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
   $('#exList').replaceChildren(...list.map((x) => {
     const last = exProgress.get(x.id)?.s?.speed;
-    const meta = el('span', { class: 'ex-meta' }, el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
+    const meta = el('span', { class: 'ex-meta' });
+    const ts = tsLabel(x);
+    if (ts) meta.append(el('span', { class: 'ts', text: ts }));
+    if (x.diff) meta.append(el('span', { class: 'diff', text: LEVELS[x.diff] }));
+    meta.append(el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
     if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
     const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
       el('span', { class: 'ex-title', text: x.title }),
