@@ -1,10 +1,17 @@
 # main'e her gönderimde testleri çalıştırır, geçerse uygulamayı GitHub Pages'te yayınlar.
 # Bir kerelik ayar: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+#
+# Önizleme: aşağıdaki önizleme dalı varsa o da .../onizleme/ adresinde yayınlanır (canlı site
+# main'den gelir, aynen kalır). O dala gönderilince Test iş akışı geçerse yayın yenilenir.
+# Dalı değiştirmek için iki yerdeki adı birlikte değiştir. Dal silinince önizleme de kalkar.
 name: Yayınla
 
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +25,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,14 +39,33 @@ jobs:
 
   deploy:
     needs: test
+    # Önizleme dalının testleri geçtiyse (workflow_run) main'in testlerini yeniden çalıştırmadan yayınla
+    if: >-
+      always() && (
+        (github.event_name != 'workflow_run' && needs.test.result == 'success') ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.head_branch == 'ccr-04f3bc7b-mmi4nj')
+      )
+    env:
+      ONIZLEME: ccr-04f3bc7b-mmi4nj
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Uygulama dosyalarını topla ve yapı numarasını yaz
         run: node tools/build.mjs _site
+      - name: Önizleme dalı (varsa) → _site/onizleme
+        run: |
+          if git fetch --depth=1 origin "refs/heads/$ONIZLEME:refs/remotes/origin/$ONIZLEME"; then
+            git worktree add --detach ../onizleme "origin/$ONIZLEME"
+            node ../onizleme/tools/build.mjs _site/onizleme "onizleme-${GITHUB_RUN_NUMBER}-$(git -C ../onizleme rev-parse --short HEAD)"
+          else
+            echo "Önizleme dalı yok, yalnızca canlı site yayınlanıyor"
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
