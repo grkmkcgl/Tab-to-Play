@@ -2,6 +2,13 @@
 
 Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metinleri Türkçe; commit mesajları da Türkçe (kısa başlık + nedenini anlatan gövde).
 
+## Çalışma kuralları
+
+- **Repoda hiçbir yerde** (kod, yorum, belge, arayüz, commit mesajı) kodu yazmakta kullanılan araçların, benzer uygulamaların ya da ücretli tab sitelerinin adı geçmez.
+- Commit'lere araç ya da oturum imzası (`Co-Authored-By`, oturum bağlantısı vb.) eklenmez. Yazar: `Görkem Kaçakgil <103423448+grkmkcgl@users.noreply.github.com>`.
+- Arayüzde gizlilik ya da bağlantı açıklaması yazılmaz ("internete bağlanmaz", "yalnızca şarkı adı gider", "şu arama motorunda açılır" gibi). Arayüz kullanıcıya ne yapacağını söyler, uygulamanın içeride nasıl çalıştığını anlatmaz. Bu kurallar ve gizlilik ayrıntıları bu dosyada ve README'de kalır.
+- `main`'e gönderilen her değişiklik testler geçerse doğrudan yayına çıkar (`pages.yml`). Göndermeden önce `npm test` tamamen yeşil olmalı. Diğer dallarda yalnızca testler çalışır (`test.yml`).
+
 ## Kurallar
 
 - **Ağ yok.** Uygulama yalnızca kendi dosyalarını yükler. Tek dış bağlantı **Tab bul** penceresindeki linkler: `target="_blank" rel="noopener noreferrer"` ile DuckDuckGo'da `site:` filtreli arama açar (`FIND_SITES` / `findUrl` in `js/app.js`), içinde yalnızca kullanıcının yazdığı şarkı adı var; uygulama bu adreslere `fetch` etmez. Ultimate Guitar kendi arama sayfasında açılır (`search.php?search_type=title&value=<şarkı adı>`, yalnızca şarkı adıyla eşleşiyor, sanatçı eklenmez). GProTab ve 911tabs'in arama adres biçimi doğrulanamadığı için şimdilik DuckDuckGo'da `site:` araması. `index.html`'deki CSP (`default-src 'self'`) bunu zorlar; CDN, analitik, harici yazı tipi eklenmez. `script-src`/`worker-src`'deki `blob:` alphaTab'ın worker'ı içindir, `style-src 'unsafe-inline'` alphaTab'ın eklediği `<style>` içindir.
