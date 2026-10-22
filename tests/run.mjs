@@ -665,6 +665,8 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.click('#segExInst [data-v="davul"]');
   await app.click('#segExLevel [data-v="olcu"]');
   assert((await app.exTitles()).includes('7/8: 2 + 2 + 3'), 'davulda da ölçü egzersizi');
+  // Ölçüler ayrı tercihte; seviye eski üçünden biri kalır (Ölçüler'i bilmeyen eski sürüm boş liste göstermesin)
+  eq(await app.ev(() => { const x = JSON.parse(localStorage.getItem('ttp-prefs')); return [x.exLevel, x.exOlcu]; }), ['ileri', true], 'ölçüler tercihi');
 
   // 5/8: nota sekizlik = 100 yazılı, 140 BPM'de metronom dakikada 140 kez (her sekizlik) tıklar
   await app.openEx('g-t5');

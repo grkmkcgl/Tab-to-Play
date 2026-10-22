@@ -36,7 +36,7 @@ Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metin
 - `songs` kaydı: `{id (SHA-256'nın ilk 12 baytı), file, title, artist, tracks:[{name, kind, tab}], bars, tempo, size, added, opened, fav, s}`.
 - `s` (şarkıya özel): `speed`, `track` (gösterilen parti), `mute`/`solo`/`vol` (parti indeksine göre), `loop:{on, from, to}` (0'dan ölçü indeksi), `tr` (antrenör: `start, target, step, every`).
 - `kind`: `gitar | bas | davul | diger` (program numarası, ad ve akorttan tahmin). `tab`: partinin telli akordu var mı. `openSong` dosyayı her açılışta yeniden okuyup `tracks`'i günceller, yani eski kayıtlar kendiliğinden düzelir.
-- Cihaz tercihleri (`ttp-prefs`): `instrument, scale, layout, stave, follow, wake, metro, countIn, metroVol, sort`; egzersiz: `exMetro, exCountIn` (şarkılardan ayrı, varsayılan açık), `exInst, exLevel` (listede seçili olan; `exLevel` `olcu` da olabilir); metronom ekranı: `mBpm, mBeats, mSub, mAccent, mVol`.
+- Cihaz tercihleri (`ttp-prefs`): `instrument, scale, layout, stave, follow, wake, metro, countIn, metroVol, sort`; egzersiz: `exMetro, exCountIn` (şarkılardan ayrı, varsayılan açık), `exInst, exLevel, exOlcu` (listede seçili olan; Ölçüler sekmesi `exOlcu`'da, `exLevel` hep eski üç seviyeden biri: aynı adresteki önizleme ile canlı site tercihleri paylaşır, eski sürüm `olcu`'yu bilmez); metronom ekranı: `mBpm, mBeats, mSub, mAccent, mVol`.
 - Egzersiz ilerlemesi: veritabanı `tab-to-play-egzersiz`, depo `progress`, kayıt `{id, s, opened}` (`s` şarkılardaki gibi: `speed` = BPM, `loop`, `tr`, `mute`…). Şarkı veritabanının sürümünü yükseltmemek için ayrı: yükseltme, eski sürüm başka sekmede açıksa bekler.
 
 ## Egzersiz modu

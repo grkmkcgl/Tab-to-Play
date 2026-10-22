@@ -37,6 +37,7 @@ function loadPrefs() {
     exCountIn: true,
     exInst: null,
     exLevel: 'baslangic',
+    exOlcu: false,
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -1222,7 +1223,9 @@ async function showExercises() {
 
 function renderExList() {
   const inst = exInst();
-  const level = prefs.exLevel;
+  // Ölçüler sekmesi ayrı tercihte (exOlcu): exLevel hep eski üç seviyeden biri kalır, Ölçüler'i
+  // bilmeyen eski sürüm (aynı adresteki önizleme ya da önbellekteki eski sayfa) boş liste göstermez.
+  const level = prefs.exOlcu ? 'olcu' : (LEVELS[prefs.exLevel] ? prefs.exLevel : 'baslangic');
   $$('#segExInst button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === inst)));
   $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
@@ -1261,7 +1264,8 @@ $('#segExInst').addEventListener('click', (e) => {
 $('#segExLevel').addEventListener('click', (e) => {
   const v = e.target.closest('button')?.dataset.v;
   if (!v) return;
-  prefs.exLevel = v;
+  prefs.exOlcu = v === 'olcu';
+  if (v !== 'olcu') prefs.exLevel = v;
   savePrefs();
   renderExList();
 });
