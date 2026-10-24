@@ -699,6 +699,72 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.close();
 });
 
+test('çalışma planı: yalnızca gitarda, aşamalar, bugünkü çalışma sırası, ✓, geri dönüş, aşama hatırlanır', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  assert(await p.isVisible('#btnPlan'), 'gitarda plan kartı');
+  await app.click('#segExInst [data-v="davul"]');
+  assert(!(await p.isVisible('#btnPlan')), 'davulda plan kartı yok');
+  await app.click('#segExInst [data-v="gitar"]');
+
+  // Plandaki her egzersiz var ve gitar egzersizi; aşamalar çakışmasın diye kontrol değil, yalnızca geçerlilik
+  const bad = await app.ev(async () => {
+    const P = await import('./js/plan.js?v=__SURUM__');
+    const E = await import('./js/egzersiz.js?v=__SURUM__');
+    return P.STAGES.flatMap((st) => P.stageIds(st)).filter((id) => E.findExercise(id)?.inst !== 'gitar');
+  });
+  eq(bad, [], 'plandaki egzersizler');
+  // Sıra: bugün açılan kalır, sonra en uzun süredir açılmayan (hiç açılmayan önce)
+  const order = await app.ev(async () => {
+    const { pick } = await import('./js/plan.js?v=__SURUM__');
+    const now = new Date(2026, 9, 24, 12).getTime();
+    const day = 864e5;
+    const m = (o) => new Map(Object.entries(o).map(([id, opened]) => [id, { opened }]));
+    return [
+      pick(['a', 'b', 'c'], 1, m({}), now),
+      pick(['a', 'b', 'c'], 1, m({ a: now - day }), now),
+      pick(['a', 'b', 'c'], 2, m({ a: now - day, b: now - 3 * day, c: now - 2 * day }), now),
+      pick(['a', 'b', 'c'], 1, m({ a: now - day, b: now - 3600e3, c: 0 }), now),
+    ];
+  });
+  eq(order, [['a'], ['b'], ['b', 'c'], ['b']], 'öneri sırası');
+
+  await app.click('#btnPlan');
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  eq(await app.pressed('#segStage'), ['0'], 'ilk aşama');
+  const today = () => p.$$eval('#planToday > li', (els) => els.map((li) => [...li.querySelectorAll('[data-id]')].map((e) => e.dataset.id)));
+  eq(await today(), [['g-b1'], ['g-b3', 'g-b6'], ['g-b5'], ['g-t2'], []], 'bugünkü çalışma');
+  assert((await app.text('#planWhen')).includes('0/'), 'hedef sayacı');
+
+  // Egzersize git, geri dön: plana döner, egzersiz ✓ ile kalır
+  await app.click('#planToday [data-id="g-b1"]');
+  await app.ready();
+  eq(await app.text('#pTitle'), 'Açık teller', 'plandan egzersiz');
+  await app.click('#btnBack');
+  await p.waitForSelector('#planView:not([hidden])');
+  await p.waitForSelector('#planToday [data-id="g-b1"] .done');
+  eq((await today())[0], ['g-b1'], 'bugün çalışılan yerinde kalır');
+
+  // Aşama değişir ve hatırlanır
+  await app.click('#segStage [data-v="1"]');
+  eq((await today())[1], ['g-o2', 'g-o4'], 'orta aşama teknik');
+  assert((await app.text('#planNext')).includes('5/8'), 'geçiş ölçütü');
+  await p.reload();
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  eq(await app.pressed('#segStage'), ['1'], 'aşama kalıcı');
+
+  await app.click('[data-go="lib"]');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.ev(() => { location.hash = '#/plan'; });
+  await p.waitForSelector('#planView:not([hidden])');
+  await app.click('#planBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.close();
+});
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -915,6 +981,10 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
     ok(await fits(), `egzersiz ${name} paneli`);
     await app.closePanels();
   }
+  await app.ev(() => { location.hash = '#/plan'; });
+  await app.page.waitForSelector('#planView:not([hidden]) #planToday li');
+  await app.click('.plan-rules summary');
+  ok(await fits(), 'çalışma planı');
   await app.ev(() => { location.hash = '#/metronom'; });
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');
@@ -977,7 +1047,7 @@ test('çevrimdışı: uygulama, şarkı ve ses internet olmadan açılır', asyn
     for (const n of await caches.keys()) for (const r of await (await caches.open(n)).keys()) keys.push(new URL(r.url).pathname);
     return keys;
   });
-  for (const f of ['/', '/js/app.js', '/js/egzersiz.js', '/js/metronom.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
+  for (const f of ['/', '/js/app.js', '/js/egzersiz.js', '/js/metronom.js', '/js/plan.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
     assert(cached.includes(f), `önbellekte yok: ${f}`);
   }
   await app.ctx.setOffline(true);

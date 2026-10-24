@@ -3,9 +3,10 @@
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
+import { RULES, STAGES, STEPS, openedToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -38,6 +39,8 @@ function loadPrefs() {
     exInst: null,
     exLevel: 'baslangic',
     exOlcu: false,
+    // Çalışma planı: seçili aşama (0–2)
+    planStage: 0,
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -194,7 +197,7 @@ async function checkInbox() {
 }
 
 // ---------------------------------------------------------------- görünümler
-const VIEWS = ['libView', 'exView', 'metroView', 'playerView'];
+const VIEWS = ['libView', 'exView', 'planView', 'metroView', 'playerView'];
 // Başka bir görünüme geçerken çalanı durdur
 function showView(id) {
   if (id !== 'playerView') {
@@ -1229,24 +1232,35 @@ function renderExList() {
   $$('#segExInst button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === inst)));
   $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
-  $('#exList').replaceChildren(...list.map((x) => {
-    const last = exProgress.get(x.id)?.s?.speed;
-    const meta = el('span', { class: 'ex-meta' });
-    const ts = tsLabel(x);
-    if (ts) meta.append(el('span', { class: 'ts', text: ts }));
-    if (x.diff) meta.append(el('span', { class: 'diff', text: LEVELS[x.diff] }));
-    meta.append(el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
-    if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
-    const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
-      el('span', { class: 'ex-title', text: x.title }),
-      el('span', { class: 'ex-desc-l', text: x.desc }),
-      meta);
-    if (last) {
-      const pct = clamp(Math.round(((last - x.min) / (x.max - x.min)) * 100), 0, 100);
-      main.append(el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%` })));
-    }
-    return el('li', { class: 'ex-item' }, main);
-  }));
+  $('#exList').replaceChildren(...list.map((x) => exRow(x)));
+  $('#btnPlan').hidden = inst !== 'gitar';
+}
+
+// Egzersiz satırı; planda hedef tempo ve bugün çalışıldıysa ✓
+const exTarget = (x) => Math.round((x.bpm + x.max) / 2 / 5) * 5;
+function exRow(x, { plan = false } = {}) {
+  const rec = exProgress.get(x.id);
+  const last = rec?.s?.speed;
+  const meta = el('span', { class: 'ex-meta' });
+  const ts = tsLabel(x);
+  if (ts) meta.append(el('span', { class: 'ts', text: ts }));
+  if (x.diff) meta.append(el('span', { class: 'diff', text: LEVELS[x.diff] }));
+  meta.append(el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
+  if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
+  const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
+    el('span', { class: 'ex-title', text: x.title }),
+    el('span', { class: 'ex-desc-l', text: x.desc }),
+    meta);
+  if (last) {
+    const pct = clamp(Math.round(((last - x.min) / (x.max - x.min)) * 100), 0, 100);
+    main.append(el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%` })));
+  }
+  if (plan) {
+    const t = exTarget(x);
+    meta.append(el('span', { class: last >= t ? 'last' : '', text: last >= t ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
+    if (openedToday(rec?.opened)) main.querySelector('.ex-title').append(el('span', { class: 'done', text: ' ✓', 'aria-label': 'bugün çalışıldı' }));
+  }
+  return el('li', { class: 'ex-item' }, main);
 }
 
 $('#btnEx').addEventListener('click', () => { location.hash = '#/egzersiz'; });
@@ -1270,6 +1284,60 @@ $('#segExLevel').addEventListener('click', (e) => {
   renderExList();
 });
 $('#exList').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-id]')?.dataset.id;
+  if (id) location.hash = `#/egzersiz/${id}`;
+});
+
+// ---------------------------------------------------------------- çalışma planı (gitar)
+async function showPlan() {
+  showView('planView');
+  document.title = 'Çalışma planı · Tab-to-Play';
+  renderPlan();
+  try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
+  renderPlan();
+}
+
+function renderPlan() {
+  const k = clamp(Math.round(prefs.planStage) || 0, 0, STAGES.length - 1);
+  const st = STAGES[k];
+  $$('#segStage button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === k)));
+  const ids = stageIds(st);
+  const reached = ids.filter((id) => (exProgress.get(id)?.s?.speed || 0) >= exTarget(findExercise(id))).length;
+  $('#planWhen').textContent = `${st.when} · Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}`;
+
+  let n = 0;
+  const steps = STEPS.map((step) => el('li', { class: 'plan-step' },
+    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. ${step.title}` }), el('span', { class: 'muted', text: ` · ${step.min} dk` })),
+    el('ul', { class: 'ex-list' }, ...pick(st[step.key], step.n, exProgress).map((id) => exRow(findExercise(id), { plan: true })))));
+  steps.push(el('li', { class: 'plan-step' },
+    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. Şarkı` }), el('span', { class: 'muted', text: ' · 5+ dk' })),
+    el('p', { class: 'muted small', text: 'Bugün çalıştığın tekniği kütüphanendeki bir şarkıda dene. Zor bölümü döngüye al, hızı düşür, aynı kurallarla yavaş yavaş artır.' }),
+    el('button', { class: 'btn', type: 'button', 'data-go': 'lib', text: 'Kütüphaneye git' })));
+  $('#planToday').replaceChildren(...steps);
+
+  $('#planRules').replaceChildren(...RULES.map((r) => el('li', { text: r })));
+  $('#planNext').replaceChildren(...(st.next
+    ? [el('b', { text: 'Sonraki aşamaya ne zaman geçmeli? ' }), st.next]
+    : [el('b', { text: 'Bundan sonra: ' }), 'şarkılarda zorlandığın bölümleri döngüye al ve aynı kurallarla çalış; zorlandığın tekniğin egzersizine geri dön.']));
+  $('#planAll').replaceChildren(...STEPS.map((step) => el('section', { class: 'plan-group' },
+    el('h3', { text: step.title }),
+    el('ul', { class: 'ex-list' }, ...st[step.key].map((id) => exRow(findExercise(id), { plan: true }))))));
+}
+
+$('#btnPlan').addEventListener('click', () => { location.hash = '#/plan'; });
+$('#planBack').addEventListener('click', () => {
+  if (lastView === 'plan' && cameToPlanFrom === 'exlist') history.back();
+  else location.hash = '#/egzersiz';
+});
+$('#segStage').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (v == null) return;
+  prefs.planStage = Number(v);
+  savePrefs();
+  renderPlan();
+});
+$('#planView').addEventListener('click', (e) => {
+  if (e.target.closest('[data-go="lib"]')) { location.hash = '#/'; return; }
   const id = e.target.closest('[data-id]')?.dataset.id;
   if (id) location.hash = `#/egzersiz/${id}`;
 });
@@ -1410,6 +1478,7 @@ $('#instGrid').addEventListener('click', (e) => {
 let lastView = null;
 let cameToExFrom = null; // egzersiz listesine nereden gelindi (geri düğmesi için)
 let cameToMetroFrom = null;
+let cameToPlanFrom = null;
 async function route() {
   const h = location.hash;
   let m;
@@ -1418,13 +1487,17 @@ async function route() {
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {
-    cameFromList = lastView === 'exlist';
+    cameFromList = lastView === 'exlist' || lastView === 'plan';
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {
-    if (lastView !== 'player' && lastView !== 'metro') cameToExFrom = lastView;
+    if (lastView !== 'player' && lastView !== 'metro' && lastView !== 'plan') cameToExFrom = lastView;
     lastView = 'exlist';
     await showExercises();
+  } else if (/^#\/plan\/?$/.test(h)) {
+    if (lastView !== 'player') cameToPlanFrom = lastView;
+    lastView = 'plan';
+    await showPlan();
   } else if (/^#\/metronom\/?$/.test(h)) {
     cameToMetroFrom = lastView;
     lastView = 'metro';
