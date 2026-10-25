@@ -33,6 +33,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* Çift dokunma yakınlaştırmasın (tablette yanlışlıkla iki kez basınca sayfa büyüyordu);
+   iki parmakla yakınlaştırma ve kaydırma çalışmaya devam eder. Alt öğelere de geçer. */
+html { touch-action: manipulation; }
+/* Düğmelere hızlı iki dokunuş yazı seçmesin */
+button, .seg, .ctl, .chip { -webkit-user-select: none; user-select: none; }
 body {
   background: var(--bg);
   color: var(--text);

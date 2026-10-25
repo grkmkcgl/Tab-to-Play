@@ -699,6 +699,20 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.close();
 });
 
+test('çift dokunma yakınlaştırmaz, iki parmakla yakınlaştırma açık', async (b, t) => {
+  const app = await App.open(b, t);
+  await app.addDemo();
+  const r = await app.ev(() => ({
+    html: getComputedStyle(document.documentElement).touchAction,
+    viewport: document.querySelector('meta[name="viewport"]').content,
+    btn: getComputedStyle(document.querySelector('#btnPlay')).userSelect,
+  }));
+  eq(r.html, 'manipulation', 'çift dokunma yakınlaştırması kapalı');
+  assert(!/user-scalable\s*=\s*no|maximum-scale/.test(r.viewport), `iki parmakla yakınlaştırma açık kalmalı: ${r.viewport}`);
+  eq(r.btn, 'none', 'düğmede yazı seçimi yok');
+  await app.close();
+});
+
 test('siyah arka plan: ayarlardan ve görünüm panelinden açılır, nota açık renk çizilir, kalıcıdır', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;

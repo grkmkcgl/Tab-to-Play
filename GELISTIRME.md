@@ -48,6 +48,7 @@ Bu repoda çalışırken bilinmesi gerekenler. Arayüz ve tüm kullanıcı metin
 - **Eski egzersizlere dokunma:** ilerleme kimliğe (`id`) göre saklanır. Yeni egzersiz yeni kimlikle eklenir; eskilerin notası değişirse kayıtlı tempo başka bir notaya ait olur.
 - Egzersiz döngüde açılır (bütün ölçüler), metronom ve sayma varsayılan açıktır. Metronom sesi `metroVol` (%20–200) hem şarkıda hem egzersizde geçerli.
 - **Yeni egzersiz:** `js/egzersiz.js`'te `GUITAR` ya da `DRUMS` listesine `{id, level, title, desc, bpm, min, max, bars, prog?, ts?, tempo?}` (ölçü egzersizinde `level` yerine `diff`, gerekirse `tsLabel`) ekle. `bars` ölçü başına alphaTex dizisi (`:8 0.6 2.6 …`); yardımcılar: `bars()` (notaları ölçülere böler, triole/altılık), `acrossStrings()`, `rock8()`. Davul adları alphaTab'ın GP adlarının küçük harfli hâli (`kickhit`, `snarehit`, `hihatclosed`, `ridemiddle`, `crashhighhit`, `hightomhit`, `lowtomhit`, `lowfloortomhit`); dikkat: `highfloortomhit` en tiz tom (MIDI 50). Test, her egzersizin açıldığını ve ölçülerinin tam dolduğunu kontrol eder.
+- **Çift dokunma:** `html { touch-action: manipulation }` tablet/telefonda çift dokunma yakınlaştırmasını kapatır (alt öğelere de uygulanır), iki parmakla yakınlaştırma açık kalır; viewport'a `user-scalable=no` konmaz. Döngüdeki "iki dokunuşla seçme" iki ayrı dokunuş, `dblclick` kullanılmaz.
 - **Siyah arka plan** (`dark`, Ayarlar ve Görünüm panelinde aynı anahtar, `[data-dark]`): `html.siyah` renk değişkenlerini değiştirir (zemin, panel, nota kağıdı `--paper` siyah). alphaTab notayı CSS ile değil kendi renkleriyle çizer: `applyDisplay` her çizimde `display.resources` renklerini `SHEET_DARK`'tan ya da alphaTab'ın varsayılanlarından (`SHEET_LIGHT`) yazar; değişince yeniden çizilir.
 - **Çalışma planı** (yalnızca gitar, egzersiz listesindeki kart): `STAGES` her aşamada `isinma/teknik/akor/olcu` gruplarında egzersiz kimlikleri tutar; `STEPS` günlük çalışmanın adımları (süre, kaç egzersiz). Günlük öneri ayrı kayıt tutmaz, egzersiz ilerlemesindeki `opened`'dan hesaplanır: bugün açılanlar ✓ ile yerinde kalır, sonra en uzun süredir açılmayanlar gelir. "Hedef" tempo, egzersizdeki hazır tempoların ortadaki değeri (`(bpm + max) / 2`, 5'e yuvarlı). Plandan açılan egzersizin geri düğmesi plana döner. Yeni egzersiz plana eklenecekse kimliğini `STAGES`'e yaz; test, plandaki her kimliğin var olan bir gitar egzersizi olduğunu kontrol eder.
 - **Metronom ekranı** (`Metronome`): AudioContext saatine ~150 ms ileri tık yazılır (arka planda 1,5 sn, zamanlayıcılar seyrekleştiği için); vuruş ışıkları aynı zamanlara göre `requestAnimationFrame` ile yanar. Ekrandan çıkınca durur.
@@ -69,7 +70,7 @@ Hepsi kodda yorumla işaretli:
 
 ```bash
 npm install
-npm test                 # 30 senaryo, ~80 sn
+npm test                 # 31 senaryo, ~80 sn
 npm test -- partiler     # adında "partiler" geçenler
 VERBOSE=1 npm test       # hata yığınlarıyla
 ```
