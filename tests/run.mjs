@@ -771,12 +771,12 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
       .flatMap((st) => P.stageIds(plan, st)).filter((id) => E.findExercise(id)?.inst !== inst));
   });
   eq(bad, [], 'plandaki egzersizler');
-  // Sıra: bugün açılan kalır, sonra en uzun süredir açılmayan (hiç açılmayan önce)
+  // Sıra: bugün çalışılan kalır, sonra en uzun süredir çalışılmayan (hiç çalışılmayan önce)
   const order = await app.ev(async () => {
     const { pick } = await import('./js/plan.js?v=__SURUM__');
     const now = new Date(2026, 9, 24, 12).getTime();
     const day = 864e5;
-    const m = (o) => new Map(Object.entries(o).map(([id, opened]) => [id, { opened }]));
+    const m = (o) => new Map(Object.entries(o).map(([id, done]) => [id, { done }]));
     return [
       pick(['a', 'b', 'c'], 1, m({}), now),
       pick(['a', 'b', 'c'], 1, m({ a: now - day }), now),
@@ -794,10 +794,16 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   eq(await today(), [['g-b1'], ['g-b3', 'g-b6'], ['g-b5'], ['g-t2'], []], 'bugünkü çalışma');
   assert((await app.text('#planWhen')).includes('0/'), 'hedef sayacı');
 
-  // Egzersize git, geri dön: plana döner, egzersiz ✓ ile kalır
+  // Egzersize git, açıp çıkmak çalışmak sayılmaz; çalışınca geri dönüldüğünde plan ✓ ile gösterir
   await app.click('#planToday [data-id="g-b1"]');
   await app.ready();
   eq(await app.text('#pTitle'), 'Açık teller', 'plandan egzersiz');
+  await app.click('#btnBack');
+  await p.waitForSelector('#planView:not([hidden])');
+  assert(!(await p.isVisible('#planToday [data-id="g-b1"] .done')), 'yalnızca açılan egzersiz ✓ almaz');
+  await app.click('#planToday [data-id="g-b1"]');
+  await app.ready();
+  await app.ev(() => ttpPractice(25));
   await app.click('#btnBack');
   await p.waitForSelector('#planView:not([hidden])');
   await p.waitForSelector('#planToday [data-id="g-b1"] .done');
@@ -830,6 +836,7 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   await app.click('#planToday [data-id="d-b1"]');
   await app.ready();
   eq(await app.text('#pTitle'), 'Dörtlük ritim', 'plandan davul egzersizi');
+  await app.ev(() => ttpPractice(25));
   await app.click('#btnBack');
   await p.waitForSelector('#planToday [data-id="d-b1"] .done');
   eq((await today())[1], ['d-b1', 'd-b9'], 'bugün çalışılan davul egzersizi yerinde kalır');
@@ -845,6 +852,78 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   await app.click('#btnPlan');
   await p.waitForSelector('#planView:not([hidden]) #planToday [data-id^="g-"]');
   eq(await app.pressed('#segStage'), ['1'], 'gitar aşaması ayrı kaldı');
+  await app.close();
+}, { webkit: true });
+
+test('çalışma geçmişi: gerçek çalma süresi, son tempo yalnız çalınınca, seri, grafikler, gün listesi', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  const today = () => app.ev(async () => {
+    const { db } = await import('./js/db.js?v=__SURUM__');
+    const d = new Date();
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return (await db.allDays()).find((x) => x.day === k) || null;
+  });
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  await app.click('#segExLevel [data-v="baslangic"]');
+  // Yalnızca açıp çıkmak: süre yok, "Son" yok
+  await app.click('#exList [data-id="g-b2"]');
+  await app.ready();
+  await app.click('#btnBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  assert(!(await app.text('#exList [data-id="g-b2"]')).includes('Son:'), 'açmak son tempo sayılmaz');
+  eq(await today(), null, 'açmak süre sayılmaz');
+  // Gerçekten çal: süre bugüne yazılır, listede son tempo görünür
+  await app.click('#exList [data-id="g-b2"]');
+  await app.ready();
+  await app.ev(() => { ttpApi.countInVolume = 0; });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 1200, null, { timeout: 10000 });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 0);
+  await app.click('#btnBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await p.waitForFunction(() => document.querySelector('#exList [data-id="g-b2"]')?.textContent.includes('Son: 60 BPM'));
+  const d1 = await today();
+  assert(d1 && d1.items['g-b2'].sec > 0.8 && d1.items['g-b2'].sec < 8 && d1.items['g-b2'].kind === 'ex', `bugünkü süre: ${JSON.stringify(d1)}`);
+  // Uzun çalışma (süre eklenir), bir şarkı da çalınır; geçmiş günler eklenir (seri)
+  await app.click('#exList [data-id="g-b2"]');
+  await app.ready();
+  await app.ev(() => ttpPractice(60)); // seri için günde en az bir dakika
+  await app.click('#btnBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.ev(async () => {
+    const { db } = await import('./js/db.js?v=__SURUM__');
+    const k = (off) => { const d = new Date(); d.setDate(d.getDate() - off); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    await db.addPractice(k(1), 'g-b2', { sec: 300, bpm: 55, title: 'Kromatik 1-2-3-4', kind: 'ex', inst: 'gitar' });
+    await db.addPractice(k(2), 'g-b2', { sec: 120, bpm: 50, title: 'Kromatik 1-2-3-4', kind: 'ex', inst: 'gitar' });
+    await db.addPractice(k(5), 'g-b2', { sec: 600, bpm: 50, title: 'Kromatik 1-2-3-4', kind: 'ex', inst: 'gitar' });
+  });
+  await app.click('#btnHist');
+  await p.waitForSelector('#histView:not([hidden]) #hDays svg');
+  eq(await app.text('#hStreak'), '3 gün', 'seri (bugün, dün, önceki gün)');
+  eq(await p.$$eval('#hDays .hit', (els) => els.length), 14, 'son 14 gün');
+  eq(await p.$$eval('#hDays .mark', (els) => els.length), 4, 'çalışılan günlerin sütunu');
+  await p.dispatchEvent('#hDays .hit >> nth=13', 'click');
+  assert((await app.text('#hDaysSel')).includes('dk') || (await app.text('#hDaysSel')).includes('sn'), 'dokununca değer');
+  eq(await p.$eval('#hEx', (e) => e.value), 'g-b2', 'tempo grafiğinde egzersiz');
+  eq(await p.$$eval('#hTempo .dot', (els) => els.length), 4, 'her gün bir tempo noktası');
+  assert((await app.text('#hTempo')).includes('Hedef 85'), 'hedef çizgisi');
+  const first = await app.text('#hList > li');
+  assert(first.includes('Kromatik 1-2-3-4') && first.includes('60 BPM'), `bugünün kaydı: ${first}`);
+  await app.click('#histBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  // Şarkı çalışması da geçmişe yazılır
+  await app.click('#exBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.addDemo();
+  await app.ev(() => ttpPractice(90));
+  await app.click('#btnBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  const d2 = await today();
+  eq(Math.round(d2.items[Object.keys(d2.items).find((k) => d2.items[k].kind === 'song')].sec), 90, 'şarkı süresi');
   await app.close();
 }, { webkit: true });
 
@@ -1099,6 +1178,9 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.page.waitForSelector('#planView:not([hidden]) #planToday li');
   await app.click('.plan-rules summary');
   ok(await fits(), 'çalışma planı');
+  await app.ev(() => { location.hash = '#/gecmis'; });
+  await app.page.waitForSelector('#histView:not([hidden])');
+  ok(await fits(), 'çalışma geçmişi');
   await app.ev(() => { location.hash = '#/metronom'; });
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');

@@ -1,5 +1,6 @@
 // Çalışma planı (gitar ve davul): üç aşama, her aşamada egzersizler gruplara ayrılır. Günlük
-// çalışma her gruptan en uzun süredir açılmayan egzersizi önerir (bugün açılanlar listede kalır).
+// çalışma her gruptan en uzun süredir çalışılmayan egzersizi önerir (bugün çalışılanlar listede
+// kalır). "Çalışıldı": o gün en az birkaç on saniye gerçekten çalındı (ilerlemedeki `done`).
 
 // Tempo ve ölçü kuralları iki enstrümanda aynı
 const TEMPO_RULES = [
@@ -99,15 +100,15 @@ const sameDay = (a, b) => {
   const y = new Date(b);
   return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
 };
-export const openedToday = (opened, now = Date.now()) => !!opened && sameDay(opened, now);
+export const isToday = (t, now = Date.now()) => !!t && sameDay(t, now);
 
-// Bir adım için önerilen egzersizler: önce bugün açılanlar (çalışılmış olarak kalsın), sonra
-// en uzun süredir açılmayanlar (hiç açılmayan önce; eşitse plandaki sıra).
+// Bir adım için önerilen egzersizler: önce bugün çalışılanlar (çalışılmış olarak kalsın), sonra
+// en uzun süredir çalışılmayanlar (hiç çalışılmayan önce; eşitse plandaki sıra).
 export function pick(ids, n, progress, now = Date.now()) {
-  const opened = (id) => progress.get(id)?.opened || 0;
-  const today = ids.filter((id) => openedToday(opened(id), now));
+  const done = (id) => progress.get(id)?.done || 0;
+  const today = ids.filter((id) => isToday(done(id), now));
   const rest = ids.filter((id) => !today.includes(id))
-    .map((id, i) => [id, opened(id), i])
+    .map((id, i) => [id, done(id), i])
     .sort((a, b) => a[1] - b[1] || a[2] - b[2])
     .map(([id]) => id);
   return [...today, ...rest].slice(0, n);

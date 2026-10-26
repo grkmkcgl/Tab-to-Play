@@ -3,7 +3,7 @@
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
-import { PLANS, openedToday, pick, stageIds } from './plan.js?v=__SURUM__';
+import { PLANS, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 
 const VERSION = '0.6.0';
@@ -200,11 +200,12 @@ async function checkInbox() {
 }
 
 // ---------------------------------------------------------------- görünümler
-const VIEWS = ['libView', 'exView', 'planView', 'metroView', 'playerView'];
+const VIEWS = ['libView', 'exView', 'planView', 'histView', 'metroView', 'playerView'];
 // Başka bir görünüme geçerken çalanı durdur
 function showView(id) {
   if (id !== 'playerView') {
     pause();
+    practiceStop(); // durma olayını beklemeden: açılan ekran az önce çalınanı görsün
     closePanels();
     if (trainer.on) stopTrainer(false);
   }
@@ -411,13 +412,14 @@ function saveSong(later = false) {
   if (later) saveTimer = setTimeout(flushSave, 250);
   else flushSave();
 }
+const exRecord = (song) => ({ id: song.id, s: song.s, opened: song.opened, played: song.played, done: song.done, best: song.best });
 function flushSave() {
   clearTimeout(saveTimer);
   const song = pendingSave;
   pendingSave = null;
   if (!song) return;
   // Egzersizin kendisi kodda; yalnızca ilerlemesi (tempo, döngü, antrenör…) saklanır
-  const put = song.ex ? db.putEx({ id: song.id, s: song.s, opened: song.opened }) : db.putSong(song);
+  const put = song.ex ? db.putEx(exRecord(song)) : db.putSong(song);
   put.catch((e) => console.warn('Kaydedilemedi', e));
 }
 addEventListener('pagehide', flushSave);
@@ -515,6 +517,7 @@ function ensureApi() {
     playing = e.state === at.synth.PlayerState.Playing;
     updatePlayButton();
     if (playing) requestWake(); else releaseWake();
+    if (playing) practiceStart(); else practiceStop();
   });
   api.playerPositionChanged.on(onPosition);
   api.playedBeatChanged.on((beat) => {
@@ -581,12 +584,17 @@ async function openExercise(id) {
       loop: { on: true, from: 0, to: sc.masterBars.length - 1 },
       tr: { start: ex.bpm, target: ex.max, step: 5, every: 2 },
     },
+    // Gerçekten çalındığı son an, o gün yeterince çalışıldığı son an, en yüksek çalınan tempo
+    played: saved?.played,
+    done: saved?.done,
+    best: saved?.best,
   };
   showPlayer(rec, sc);
 }
 
 // Şarkıyı ya da egzersizi çalarda aç
 function showPlayer(song, sc) {
+  practiceStop(); // çalan süre önceki şarkıya yazılsın
   flushSave(); // önceki şarkının bekleyen kaydı kaybolmasın
   clearTimeout(pauseTimer);
   if (api) api.stop();
@@ -1239,6 +1247,65 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && (playing || metro.running)) requestWake();
 });
 
+// ---------------------------------------------------------------- çalışma süresi
+// Gerçek çalma süresi (sayma dahil): çalar çalarken geçen zaman. Her 15 sn'de ve durunca günün
+// kaydına eklenir (db.addPractice). Egzersizde: çalınınca `played` (listede "Son: … BPM" ancak o
+// zaman görünür), o gün en az PRACTICED_SEC çalınınca `done` (plandaki ✓ ve öneri sırası), en az
+// BPM_SEC aynı tempoda çalınınca `best` (hedef tempoya ulaşıldı mı).
+const PRACTICED_SEC = 20;
+const BPM_SEC = 8;
+let playClock = 0; // çalmanın başladığı ya da son yazıldığı an (performance.now); 0 = durmuş
+let practiceTimer = 0;
+// Yazmalar sırayla; listeler okumadan önce bekler (yoksa az önce çalınan görünmeyebilir)
+let practiceQueue = Promise.resolve();
+const pad2 = (n) => String(n).padStart(2, '0');
+const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+
+function practiceStart() {
+  if (playClock) return;
+  playClock = performance.now();
+  practiceTimer = setInterval(practiceTick, 15000);
+}
+function practiceStop() {
+  practiceTick();
+  playClock = 0;
+  clearInterval(practiceTimer);
+}
+function practiceTick() {
+  if (!playClock || !cur) return;
+  const now = performance.now();
+  // Cihaz uyuyup uyanınca aradaki süre sayılmasın (yazma aralığı 15 sn)
+  const sec = Math.min(30, (now - playClock) / 1000);
+  playClock = now;
+  const song = cur;
+  practiceQueue = practiceQueue.then(() => addPractice(song, sec));
+}
+
+async function addPractice(song, sec) {
+  if (!song || sec < 0.5) return;
+  const ex = song.ex;
+  const bpm = Math.round(ex ? song.s.speed : ((song.tempo || 0) * song.s.speed) / 100);
+  const steady = sec >= BPM_SEC && bpm > 0;
+  let item;
+  try {
+    item = await db.addPractice(dayKey(), song.id, {
+      sec, bpm: steady ? bpm : 0, title: song.title, kind: ex ? 'ex' : 'song', inst: ex?.inst,
+    });
+  } catch (e) {
+    console.warn('Çalışma süresi kaydedilemedi', e);
+    return;
+  }
+  if (!ex) return;
+  song.played = Date.now();
+  if (steady) song.best = Math.max(song.best || 0, bpm);
+  if (item.sec >= PRACTICED_SEC) song.done = Date.now();
+  await db.putEx(exRecord(song)).catch((e) => console.warn('Kaydedilemedi', e));
+}
+// Testler için: açık şarkı ya da egzersiz o kadar süre çalınmış gibi
+window.ttpPractice = (sec) => { const song = cur; practiceQueue = practiceQueue.then(() => addPractice(song, sec)); return practiceQueue; };
+document.addEventListener('visibilitychange', () => { if (document.hidden) practiceTick(); });
+addEventListener('pagehide', practiceTick);
+
 // ---------------------------------------------------------------- egzersizler
 const exInst = () => prefs.exInst || (prefs.instrument === 'davul' ? 'davul' : 'gitar');
 let exProgress = new Map();
@@ -1247,6 +1314,7 @@ async function showExercises() {
   showView('exView');
   document.title = 'Egzersizler · Tab-to-Play';
   renderExList();
+  await practiceQueue;
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
   renderExList();
 }
@@ -1266,7 +1334,8 @@ function renderExList() {
 const exTarget = (x) => Math.round((x.bpm + x.max) / 2 / 5) * 5;
 function exRow(x, { plan = false } = {}) {
   const rec = exProgress.get(x.id);
-  const last = rec?.s?.speed;
+  // Yalnızca açıp çıkmak "son tempo" sayılmaz; gerçekten çalınmış olmalı
+  const last = rec?.played ? rec.s?.speed : null;
   const meta = el('span', { class: 'ex-meta' });
   const ts = tsLabel(x);
   if (ts) meta.append(el('span', { class: 'ts', text: ts }));
@@ -1283,9 +1352,10 @@ function exRow(x, { plan = false } = {}) {
   }
   if (plan) {
     const t = exTarget(x);
-    meta.append(el('span', { class: last >= t ? 'last' : '', text: last >= t ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
+    const ok = (rec?.best || 0) >= t; // hedef tempoda en az birkaç saniye çalındı
+    meta.append(el('span', { class: ok ? 'last' : '', text: ok ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
     // ✓ ekran okuyucuda "onay işareti" diye okunmasın: görünmez metinle anlatılır
-    if (openedToday(rec?.opened)) {
+    if (isToday(rec?.done)) {
       main.querySelector('.ex-title').append(el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }), el('span', { class: 'sr-only', text: ' (bugün çalışıldı)' }));
     }
   }
@@ -1326,6 +1396,7 @@ async function showPlan() {
   $('#planTitle').textContent = title;
   document.title = `${title} · Tab-to-Play`;
   renderPlan();
+  await practiceQueue;
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
   renderPlan();
 }
@@ -1337,7 +1408,7 @@ function renderPlan() {
   const st = plan.stages[k];
   $$('#segStage button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === k)));
   const ids = stageIds(plan, st);
-  const reached = ids.filter((id) => (exProgress.get(id)?.s?.speed || 0) >= exTarget(findExercise(id))).length;
+  const reached = ids.filter((id) => (exProgress.get(id)?.best || 0) >= exTarget(findExercise(id))).length;
   $('#planWhen').textContent = `${st.when} · Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}`;
 
   let n = 0;
@@ -1376,6 +1447,193 @@ $('#planView').addEventListener('click', (e) => {
   const id = e.target.closest('[data-id]')?.dataset.id;
   if (id) location.hash = `#/egzersiz/${id}`;
 });
+
+// ---------------------------------------------------------------- çalışma geçmişi ekranı
+const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+const WEEKDAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+const keyDate = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
+const dayShort = (key) => { const d = keyDate(key); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+const dayLong = (key) => `${dayShort(key)} ${WEEKDAYS[keyDate(key).getDay()]}`;
+const fmtDur = (sec) => {
+  if (sec < 60) return `${Math.round(sec)} sn`;
+  if (sec < 3600) return `${Math.round(sec / 60)} dk`;
+  const m = Math.round(sec / 60);
+  return `${Math.floor(m / 60)} sa ${m % 60} dk`;
+};
+const daysBack = (n, now = Date.now()) => Array.from({ length: n }, (_, i) => {
+  const d = new Date(now);
+  d.setDate(d.getDate() - (n - 1 - i));
+  return dayKey(d);
+});
+// Seri: art arda en az bir dakika çalışılan günler. Bugün henüz çalışılmadıysa seri dünden sayılır.
+function streak(days, now = Date.now()) {
+  const on = new Set(days.filter((d) => d.sec >= 60).map((d) => d.day));
+  const t = new Date(now);
+  if (!on.has(dayKey(t))) t.setDate(t.getDate() - 1);
+  let n = 0;
+  while (on.has(dayKey(t))) { n++; t.setDate(t.getDate() - 1); }
+  return n;
+}
+
+let histDays = [];
+let histEx = null; // tempo grafiğinde seçili egzersiz
+async function showHistory() {
+  showView('histView');
+  document.title = 'Çalışma geçmişi · Tab-to-Play';
+  await practiceQueue;
+  try { histDays = (await db.allDays()).sort((a, b) => (a.day < b.day ? -1 : 1)); } catch { histDays = []; }
+  renderHistory();
+}
+
+function renderHistory() {
+  const byDay = new Map(histDays.map((d) => [d.day, d]));
+  const week = daysBack(7).reduce((a, k) => a + (byDay.get(k)?.sec || 0), 0);
+  const total = histDays.reduce((a, d) => a + d.sec, 0);
+  const n = streak(histDays);
+  $('#hStreak').textContent = `${n} gün`;
+  // Kutular dar: bir saatten uzunu ondalıklı saat
+  const tile = (sec) => (sec >= 3600 ? `${(sec / 3600).toFixed(1).replace('.', ',')} sa` : fmtDur(sec));
+  $('#hWeek').textContent = tile(week);
+  $('#hTotal').textContent = tile(total);
+  $('#hEmpty').hidden = histDays.length > 0;
+  $('#hBody').hidden = histDays.length === 0;
+  if (!histDays.length) return;
+
+  // Son 14 gün: dakika
+  const keys = daysBack(14);
+  columnChart($('#hDays'), $('#hDaysSel'), keys.map((k) => ({
+    v: (byDay.get(k)?.sec || 0) / 60,
+    x: String(keyDate(k).getDate()),
+    cap: `${dayLong(k)}: ${fmtDur(byDay.get(k)?.sec || 0)}`,
+  })));
+
+  // Tempo gelişimi: en son çalışılan egzersiz önce
+  const last = new Map();
+  for (const d of histDays) for (const [id, it] of Object.entries(d.items)) if (it.kind === 'ex' && it.bpm && findExercise(id)) last.set(id, d.day);
+  const exIds = [...last.keys()].sort((a, b) => (last.get(a) < last.get(b) ? 1 : -1));
+  $('#hTempoBox').hidden = !exIds.length;
+  if (exIds.length) {
+    if (!exIds.includes(histEx)) histEx = exIds[0];
+    $('#hEx').replaceChildren(...exIds.map((id) => {
+      const x = findExercise(id);
+      return el('option', { value: id, text: `${KIND_LABEL[x.inst]} · ${x.title}` });
+    }));
+    $('#hEx').value = histEx;
+    const x = findExercise(histEx);
+    const pts = histDays.filter((d) => d.items[histEx]?.bpm).slice(-20)
+      .map((d) => ({ v: d.items[histEx].bpm, x: dayShort(d.day), cap: `${dayLong(d.day)}: ${d.items[histEx].bpm} BPM · ${fmtDur(d.items[histEx].sec)}` }));
+    lineChart($('#hTempo'), $('#hTempoSel'), pts, { ref: exTarget(x), refLabel: `Hedef ${exTarget(x)}` });
+  }
+
+  // Günler (grafiklerin tablo karşılığı): en yeni gün önce
+  $('#hList').replaceChildren(...[...histDays].reverse().slice(0, 30).map((d) => el('li', { class: 'hist-day' },
+    el('div', { class: 'hist-day-h' }, el('b', { text: dayLong(d.day) }), el('span', { class: 'muted', text: ` · ${fmtDur(d.sec)}` })),
+    el('ul', {}, ...Object.values(d.items).sort((a, b) => b.sec - a.sec).map((it) => el('li', {},
+      el('span', { text: it.title }),
+      el('span', { class: 'muted', text: ` · ${fmtDur(it.sec)}${it.bpm && it.kind === 'ex' ? ` · ${it.bpm} BPM` : ''}` })))))));
+}
+
+$('#hEx').addEventListener('change', (e) => { histEx = e.target.value; renderHistory(); });
+$('#btnHist').addEventListener('click', () => { location.hash = '#/gecmis'; });
+$('#histBack').addEventListener('click', () => {
+  if (lastView === 'hist' && cameToHistFrom) history.back();
+  else location.hash = '#/egzersiz';
+});
+
+// Küçük SVG grafikler (tek seri, gösterge kutusu yok: başlık neyi gösterdiğini söyler). İnce
+// işaretler, saç teli ızgara; bir işarete dokununca ya da üzerine gelince değeri alttaki satırda
+// yazılır, ekran okuyucu her işaretin etiketini okur. Renkler CSS'ten (temaya uyar).
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}, text = null) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+// Eksen için yuvarlak adım: 1, 2, 5 × 10^k
+function niceStep(range, count = 3) {
+  const raw = range / count;
+  const p = 10 ** Math.floor(Math.log10(raw || 1));
+  return [1, 2, 5, 10].map((m) => m * p).find((x) => x >= raw) || raw;
+}
+const CW = 340;
+const CH = 150;
+const PAD = { l: 34, r: 8, t: 12, b: 22 };
+function chartFrame(box, ticks, y) {
+  const svg = svgEl('svg', { viewBox: `0 0 ${CW} ${CH}`, class: 'chart-svg', role: 'img' });
+  for (const t of ticks) {
+    svg.append(svgEl('line', { class: 'grid', x1: PAD.l, x2: CW - PAD.r, y1: y(t), y2: y(t) }));
+    svg.append(svgEl('text', { class: 'tick', x: PAD.l - 6, y: y(t) + 3.5, 'text-anchor': 'end' }, String(t)));
+  }
+  box.replaceChildren(svg);
+  return svg;
+}
+// Dokunulabilir alan (işaretten büyük): değeri yazar, seçili işareti belirginleştirir
+function hitArea(svg, sel, mark, x, w, cap) {
+  const r = svgEl('rect', { class: 'hit', x, y: 0, width: w, height: CH, tabindex: '0', 'aria-label': cap });
+  r.append(svgEl('title', {}, cap));
+  const on = () => {
+    svg.querySelectorAll('.on').forEach((m) => m.classList.remove('on'));
+    mark?.classList.add('on');
+    sel.textContent = cap;
+  };
+  for (const ev of ['pointerenter', 'click', 'focus']) r.addEventListener(ev, on);
+  svg.append(r);
+}
+
+function columnChart(box, sel, data) {
+  const max = Math.max(...data.map((d) => d.v), 1);
+  const step = niceStep(max);
+  const top = Math.ceil(max / step) * step;
+  const y0 = CH - PAD.b;
+  const y = (v) => y0 - (v / top) * (y0 - PAD.t);
+  const svg = chartFrame(box, Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step), y);
+  const band = (CW - PAD.l - PAD.r) / data.length;
+  const w = Math.min(16, band - 6);
+  data.forEach((d, i) => {
+    const x = PAD.l + i * band + (band - w) / 2;
+    let bar = null;
+    const h = y0 - y(d.v);
+    if (h >= 1) {
+      // Uç yuvarlak (4 px), taban düz
+      const r = Math.min(4, h, w / 2);
+      const t = y0 - h;
+      bar = svgEl('path', { class: 'mark', d: `M${x},${y0}V${t + r}Q${x},${t} ${x + r},${t}H${x + w - r}Q${x + w},${t} ${x + w},${t + r}V${y0}Z` });
+      svg.append(bar);
+    }
+    if (i % 2 === (data.length - 1) % 2) svg.append(svgEl('text', { class: 'tick', x: x + w / 2, y: CH - 6, 'text-anchor': 'middle' }, d.x));
+    hitArea(svg, sel, bar, PAD.l + i * band, band, d.cap);
+  });
+  svg.setAttribute('aria-label', 'Son 14 günde günlük çalışma süresi (dakika)');
+  sel.textContent = data.at(-1).cap;
+}
+
+function lineChart(box, sel, data, { ref, refLabel }) {
+  const vals = [...data.map((d) => d.v), ref];
+  const step = niceStep(Math.max(...vals) - Math.min(...vals) + 10, 3);
+  const lo = Math.floor((Math.min(...vals) - 2) / step) * step;
+  const hi = Math.ceil((Math.max(...vals) + 2) / step) * step;
+  const y = (v) => CH - PAD.b - ((v - lo) / (hi - lo)) * (CH - PAD.b - PAD.t);
+  const ticks = [];
+  for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(t);
+  const svg = chartFrame(box, ticks, y);
+  const span = CW - PAD.l - PAD.r - 16;
+  const x = (i) => PAD.l + 8 + (data.length > 1 ? (i / (data.length - 1)) * span : span / 2);
+  // Hedef: ince referans çizgisi, sağda etiket
+  svg.append(svgEl('line', { class: 'ref', x1: PAD.l, x2: CW - PAD.r, y1: y(ref), y2: y(ref) }));
+  svg.append(svgEl('text', { class: 'tick', x: CW - PAD.r, y: y(ref) - 4, 'text-anchor': 'end' }, refLabel));
+  if (data.length > 1) svg.append(svgEl('path', { class: 'line', d: data.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.v)}`).join('') }));
+  const band = data.length > 1 ? span / (data.length - 1) : span;
+  data.forEach((d, i) => {
+    const dot = svgEl('circle', { class: 'dot', cx: x(i), cy: y(d.v), r: 4 });
+    svg.append(dot);
+    hitArea(svg, sel, dot, x(i) - band / 2, band, d.cap);
+  });
+  svg.append(svgEl('text', { class: 'tick', x: x(0), y: CH - 6, 'text-anchor': data.length > 1 ? 'start' : 'middle' }, data[0].x));
+  if (data.length > 1) svg.append(svgEl('text', { class: 'tick', x: x(data.length - 1), y: CH - 6, 'text-anchor': 'end' }, data.at(-1).x));
+  svg.setAttribute('aria-label', 'Egzersizde gün gün çalınan en yüksek tempo (BPM)');
+  sel.textContent = data.at(-1).cap;
+}
 
 // ---------------------------------------------------------------- tek başına metronom
 const metro = new Metronome();
@@ -1514,6 +1772,7 @@ let lastView = null;
 let cameToExFrom = null; // egzersiz listesine nereden gelindi (geri düğmesi için)
 let cameToMetroFrom = null;
 let cameToPlanFrom = null;
+let cameToHistFrom = null;
 async function route() {
   const h = location.hash;
   let m;
@@ -1526,13 +1785,17 @@ async function route() {
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {
-    if (lastView !== 'player' && lastView !== 'metro' && lastView !== 'plan') cameToExFrom = lastView;
+    if (!['player', 'metro', 'plan', 'hist'].includes(lastView)) cameToExFrom = lastView;
     lastView = 'exlist';
     await showExercises();
   } else if (/^#\/plan\/?$/.test(h)) {
     if (lastView !== 'player') cameToPlanFrom = lastView;
     lastView = 'plan';
     await showPlan();
+  } else if (/^#\/gecmis\/?$/.test(h)) {
+    cameToHistFrom = lastView === 'exlist' || lastView === 'plan' ? lastView : null;
+    lastView = 'hist';
+    await showHistory();
   } else if (/^#\/metronom\/?$/.test(h)) {
     cameToMetroFrom = lastView;
     lastView = 'metro';
