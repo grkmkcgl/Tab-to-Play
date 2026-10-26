@@ -693,16 +693,15 @@ function togglePlay() {
 
 // Ok tuşu ya da pedal art arda basılınca önceki atamanın konum olayı sonradan gelebiliyor (yavaş
 // cihazda) ve ölçüyü geri çekiyordu; bir sonraki basış da yanlış ölçüden devam edip kayboluyordu.
-// En son istenen konum gelene kadar (en çok 1,5 sn) başka atama olayları ölçüyü değiştirmez.
+// En son istenen konumdan sonraki 1,5 sn boyunca başka konumlara ait atama olayları ölçüyü
+// değiştirmez (olaylar sırasız da gelebilir; eşleşen geldi diye bırakılmaz). Notaya dokunuş ve
+// konum çubuğu bırakır.
 let seekTo = null; // { tick, at }
 function onPosition(e) {
   endTime = e.endTime;
   if (!seeking) $('#seek').value = e.endTime ? Math.round((e.currentTime / e.endTime) * 1000) : 0;
   $('#posTime').textContent = `${fmtTime(e.currentTime)} / ${fmtTime(e.endTime)}`;
-  if (e.isSeek && seekTo && performance.now() - seekTo.at < 1500) {
-    if (Math.abs(e.currentTick - seekTo.tick) > 10) return; // eski atama
-    seekTo = null;
-  }
+  if (e.isSeek && seekTo && performance.now() - seekTo.at < 1500 && Math.abs(e.currentTick - seekTo.tick) > 10) return; // eski atama
   if (e.isSeek && api?.tickCache && score) {
     const r = api.tickCache.findBeat(new Set([shown]), e.currentTick);
     if (r?.beat) { curBar = r.beat.voice.bar.index; updateBarLabel(); }
@@ -1218,7 +1217,12 @@ $('#btnStart').addEventListener('click', () => {
     api.tickPosition = api.playbackRange.startTick;
     seekTo = { tick: api.playbackRange.startTick, at: performance.now() };
   }
-  else { stop(); curBar = 0; updateBarLabel(); }
+  else {
+    stop();
+    curBar = 0;
+    seekTo = { tick: 0, at: performance.now() };
+    updateBarLabel();
+  }
 });
 // Listeden açıldıysa geri düğmesi tarayıcı geçmişini kullanır (Android geri tuşuyla aynı davranır).
 // Şarkı kütüphaneye, egzersiz egzersiz listesine döner.
