@@ -326,7 +326,6 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .metro-card small { color: var(--muted); font-size: 13px; }
 .metro-card:active { transform: scale(.98); }
 .plan-card { margin-bottom: 10px; }
-.plan-card[hidden] { display: none; }
 .plan .seg.wide { margin-bottom: 6px; }
 .plan-h { font-size: 18px; margin: 18px 0 6px; }
 .plan-h small { font-size: 13px; font-weight: 400; }

@@ -509,21 +509,41 @@ const CR = 'crashhighhit';
 const T1 = 'hightomhit';
 const T2 = 'lowtomhit';
 const FT = 'lowfloortomhit'; // GP adları yanıltıcı: highfloortomhit en tiz tom (MIDI 50)
+const HO = 'hihatopen';
+const HP = 'pedalhihathit'; // ayakla hi-hat
 const hit = (...xs) => (xs.length > 1 ? `(${xs.join(' ')})` : xs[0]);
 
-// Sekizlik hi-hat üzerinde kick (k) ve trampet (s) konumları (0–7)
-function rock8(kicks, { top = H, crash = false } = {}) {
+// Sekizlik hi-hat üzerinde kick (k) ve trampet (s) konumları (0–7); `open`daki konumlarda açık hi-hat
+function rock8(kicks, { top = H, crash = false, snares = [2, 6], open = [] } = {}) {
   return `:8 ${Array.from({ length: 8 }, (_, i) => {
     const parts = [];
     if (kicks.includes(i)) parts.push(K);
-    if (i === 2 || i === 6) parts.push(S);
-    parts.push(crash && i === 0 ? CR : top);
+    if (snares.includes(i)) parts.push(S);
+    parts.push(crash && i === 0 ? CR : open.includes(i) ? HO : top);
     return hit(...parts);
   }).join(' ')}`;
 }
 
 const sn = (txt, accent = false) => `${S}{${accent ? 'ac ' : ''}txt "${txt}"}`;
 const paradiddle = ['R', 'L', 'R', 'R', 'L', 'R', 'L', 'L'];
+
+// Onaltılık ızgara: sekizlik hi-hat, kick ve trampet konumları (0–15), boş yerde sus
+function groove16(kicks, { snares = [4, 12], crash = false } = {}) {
+  return `:16 ${Array.from({ length: 16 }, (_, i) => {
+    const parts = [];
+    if (kicks.includes(i)) parts.push(K);
+    if (snares.includes(i)) parts.push(S);
+    if (i % 2 === 0) parts.push(crash && i === 0 ? CR : H);
+    return parts.length ? hit(...parts) : 'r';
+  }).join(' ')}`;
+}
+// Flam: küçük nota vuruşun üstünde (asıl notadan pay alır, ölçü süresi değişmez), asıl nota vurgulu
+const flam = (x, dur) => `:8 ${S}{gr ob} :${dur} ${sn(x, true)}`;
+// Swing ride: “ding, ding-ga”; ayak hi-hat 2 ve 4’te, istenirse kick 1 ve 3’te
+function swing(kick) {
+  const one = kick ? hit(K, RD) : RD;
+  return `:8 ${[one, 'r', 'r', hit(RD, HP), 'r', RD, one, 'r', 'r', hit(RD, HP), 'r', RD].map((x) => tu(x)).join(' ')}`;
+}
 
 const DRUMS = [
   {
@@ -632,10 +652,143 @@ const DRUMS = [
       hit(K, S, RD), K, K, K,
     ].join(' ')}`], 4),
   },
+
+  // ---- ek egzersizler (kimlikler eskilerden sonra gelir; eski kayıtlı tempolar etkilenmez)
+  {
+    id: 'd-b5', level: 'baslangic', title: 'Çift vuruş (RRLL)',
+    desc: 'Her elle iki vuruş: sağ-sağ-sol-sol. İkinci vuruş birincisi kadar güçlü olsun; önce sekizlik, sonra onaltılık.',
+    bpm: 60, min: 50, max: 110,
+    bars: [
+      ...repeat([`:8 ${repeat(['R', 'R', 'L', 'L'], 2).map((x) => sn(x)).join(' ')}`], 2),
+      ...repeat([`:16 ${repeat(['R', 'R', 'L', 'L'], 4).map((x) => sn(x)).join(' ')}`], 2),
+    ],
+  },
+  {
+    id: 'd-b6', level: 'baslangic', title: 'Tom turu',
+    desc: 'Trampetten yer tomuna kadar her davula sırayla vur, sonra geri dön: önce dörtlük, sonra sekizlik. Kollar davullar arasında rahat dolaşsın, vuruşlar eşit sesli.',
+    bpm: 70, min: 50, max: 130,
+    bars: [
+      `:4 ${S} ${T1} ${T2} ${FT}`, `:4 ${FT} ${T2} ${T1} ${S}`,
+      `:8 ${[S, T1, T2, FT].flatMap((d) => [d, d]).join(' ')}`,
+      `:8 ${[FT, T2, T1, S].flatMap((d) => [d, d]).join(' ')}`,
+    ],
+  },
+  {
+    id: 'd-b7', level: 'baslangic', title: 'Dans ritmi (her vuruşta kick)',
+    desc: 'Her vuruşta kick, 2 ve 4’te trampet. Hi-hat vuruşlarda kapalı, aradaki “ve”lerde açık; açık ses kısa ve net olsun.',
+    bpm: 80, min: 60, max: 140,
+    bars: [true, false, false, false].map((crash) => `:8 ${Array.from({ length: 8 }, (_, i) => {
+      if (i % 2) return HO;
+      return hit(K, ...(i === 2 || i === 6 ? [S] : []), crash && i === 0 ? CR : H);
+    }).join(' ')}`),
+  },
+  {
+    id: 'd-b8', level: 'baslangic', title: 'Sekizlik fill ve crash',
+    desc: 'Üç ölçü temel rock ritmi, dördüncü ölçüde sekizlik fill: trampet, tiz tom, orta tom, yer tomu ikişer. Döngü başında crash ve kick ile ritme dön.',
+    bpm: 70, min: 50, max: 130,
+    bars: [
+      rock8([0, 4], { crash: true }), rock8([0, 4]), rock8([0, 4]),
+      `:8 ${[S, T1, T2, FT].flatMap((d) => [d, d]).join(' ')}`,
+    ],
+  },
+  {
+    id: 'd-b9', level: 'baslangic', title: 'Vurgu: vuruşta ve arada',
+    desc: 'Trampette sekizlik, sağ-sol sırayla. Önce vuruşlar (1, 2, 3, 4) vurgulu, sonra aradaki “ve”ler. Vurgusuz notalar alçaktan ve eşit sesli.',
+    bpm: 70, min: 50, max: 130,
+    bars: [0, 0, 1, 1].map((k) => `:8 ${repeat(['R', 'L'], 4).map((x, i) => sn(x, i % 2 === k)).join(' ')}`),
+  },
+  {
+    id: 'd-o5', level: 'orta', title: 'Yarım zaman (half-time)',
+    desc: 'Trampet yalnızca 3. vuruşta, kick 1’de ve 2’nin “ve”sinde. Tempo aynı ama ritim yarı hızda gibi ağır duyulur; hi-hat sekizlik ve düzenli.',
+    bpm: 80, min: 60, max: 150,
+    bars: [
+      rock8([0, 3], { snares: [4], crash: true }), rock8([0, 3], { snares: [4] }),
+      rock8([0, 3], { snares: [4] }), rock8([0, 3, 7], { snares: [4] }),
+    ],
+  },
+  {
+    id: 'd-o6', level: 'orta', title: 'Açık hi-hat',
+    desc: 'Temel rock ritminde hi-hat 2’nin ve 4’ün “ve”sinde açılır, sonraki vuruşta ayakla kapanır. Açık ses tam bir sekizlik sürsün, ne kısa ne uzun.',
+    bpm: 80, min: 60, max: 140,
+    bars: [
+      rock8([0, 4], { crash: true, open: [3, 7] }), rock8([0, 4], { open: [3, 7] }),
+      rock8([0, 4, 5], { open: [3, 7] }), rock8([0, 4], { open: [3, 7] }),
+    ],
+  },
+  {
+    id: 'd-o7', level: 'orta', title: 'Onaltılık kick',
+    desc: 'Hi-hat sekizlik, 2 ve 4’te trampet; kick onaltılığın ara yerlerinde (“e” ve “a”). Her ölçüde kick başka yerde; önce “bir-e-ve-a” diye sayarak yavaş çal.',
+    bpm: 70, min: 50, max: 120,
+    bars: [groove16([0, 3, 8], { crash: true }), groove16([0, 7, 8]), groove16([0, 8, 11]), groove16([0, 3, 8, 11])],
+  },
+  {
+    id: 'd-o8', level: 'orta', title: 'Swing ride (caz)',
+    desc: 'Ride’da “ding, ding-ga, ding, ding-ga”: her vuruş üçe bölünür, 2 ve 4’te üçüncü parçaya da vurulur. Ayak hi-hat 2 ve 4’te kapanır; son iki ölçüde kick 1 ve 3’te hafifçe eklenir.',
+    bpm: 90, min: 60, max: 200,
+    bars: [swing(false), swing(false), swing(true), swing(true)],
+  },
+  {
+    id: 'd-o9', level: 'orta', title: 'Yarım ölçü fill',
+    desc: 'İki vuruş ritim, iki vuruş onaltılık fill (sağ-sol sırayla). Fill’den sonra bir sonraki ölçünün 1’ine crash ve kick ile tam otur.',
+    bpm: 70, min: 50, max: 130,
+    bars: [
+      rock8([0, 4], { crash: true }),
+      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${[S, S, T1, T1, T2, T2, FT, FT].join(' ')}`,
+      rock8([0, 4], { crash: true }),
+      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${[S, S, S, S, T2, T2, FT, FT].join(' ')}`,
+    ],
+  },
+  {
+    id: 'd-o10', level: 'orta', title: 'Flam ve flam tap',
+    desc: 'Flam: küçük nota alçaktan, asıl nota yüksekten neredeyse aynı anda; iki ayrı vuruş değil, kalın tek bir ses gibi. Önce dörtlükte eller sırayla, sonra flam tap (lR R, rL L).',
+    bpm: 60, min: 40, max: 110,
+    bars: [
+      ...repeat([['R', 'L', 'R', 'L'].map((x) => flam(x, 4)).join(' ')], 2),
+      ...repeat([['R', 'L', 'R', 'L'].map((x) => `${flam(x, 8)} ${sn(x)}`).join(' ')], 2),
+    ],
+  },
+  {
+    id: 'd-i5', level: 'ileri', title: 'Lineer groove',
+    desc: 'Hiçbir uzuv bir başkasıyla aynı anda vurmaz: hi-hat, kick ve trampet sırayla. Onaltılık; 2 ve 4’te vurgulu trampet, aradakiler ghost.',
+    bpm: 70, min: 50, max: 120,
+    bars: [
+      ...repeat([`:16 ${[K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H].join(' ')}`], 3),
+      `:16 ${[K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, `${S}{g}`, K, `${S}{ac}`, T1, T2, FT].join(' ')}`,
+    ],
+  },
+  {
+    id: 'd-i6', level: 'ileri', title: 'Yarım zaman shuffle',
+    desc: 'Triole üzerinde hi-hat “TA-a-TA”, aradaki boşluklarda trampete ghost; 3. vuruşta vurgulu trampet. Ghost notalar çok hafif, hi-hat düzenli.',
+    bpm: 70, min: 50, max: 120,
+    bars: repeat([`:8 ${[
+      hit(K, H), `${S}{g}`, H,
+      H, `${S}{g}`, hit(K, H),
+      hit(`${S}{ac}`, H), 'r', H,
+      H, `${S}{g}`, hit(K, H),
+    ].map((x) => fx(x, 'tu 3')).join(' ')}`], 4),
+  },
+  {
+    id: 'd-i7', level: 'ileri', title: 'Altılık rulo (six stroke roll)',
+    desc: 'R-LL-RR-L: tek, iki çift, tek. İlk ve son vuruş vurgulu, çiftler alçak. Her vuruşa altı nota; son iki ölçüde ayak dörtlük kick ile eşlik eder.',
+    bpm: 50, min: 40, max: 100,
+    bars: [false, false, true, true].map((kick) => `:16 ${repeat(['R', 'L', 'L', 'R', 'R', 'L'], 4)
+      .map((x, i) => {
+        const s = sn(x, i % 6 === 0 || i % 6 === 5);
+        return fx(kick && i % 6 === 0 ? `(${s} ${K})` : s, 'tu 3');
+      }).join(' ')}`),
+  },
+  {
+    id: 'd-i8', level: 'ileri', title: 'Çift pedal gallop',
+    desc: 'Kick her vuruşta bir sekizlik iki onaltılık: “TAM-ta-ta”. Ride dörtlük, 2 ve 4’te trampet, ilk vuruşta crash. Ayaklar eşit sesli ve tempoda.',
+    bpm: 80, min: 60, max: 170,
+    bars: [true, false, false, false].map((crash) => [0, 1, 2, 3]
+      .map((b) => `:8 ${hit(K, ...(b % 2 ? [S] : []), crash && b === 0 ? CR : RD)} :16 ${K} ${K}`).join(' ')),
+  },
 ];
 
-// Ölçü egzersizleri: hi-hat sekizlik, grup başlarında kick, aradaki gruplarda trampet
-function meterGroove(groups, { crash = false } = {}) {
+// Ölçü egzersizleri: hi-hat sekizlik, grup başlarında kick, aradaki gruplarda trampet; istenirse
+// ilk vuruşun üstüne grup yazısı
+function meterGroove(groups, { crash = false, label = '' } = {}) {
   const starts = [];
   let i = 0;
   for (const g of groups) { starts.push(i); i += g; }
@@ -644,7 +797,8 @@ function meterGroove(groups, { crash = false } = {}) {
     const parts = [];
     if (g >= 0) parts.push(g % 2 ? `${S}{ac}` : K);
     parts.push(crash && k === 0 ? CR : H);
-    return hit(...parts);
+    const b = hit(...parts);
+    return label && k === 0 ? `${b}{txt "${label}"}` : b;
   }).join(' ')}`;
 }
 
@@ -692,6 +846,66 @@ const DRUMS_TS = [
     bars: [
       `\\ts 4 4 ${rock8([0, 4], { crash: true })}`, `\\ts 7 8 ${meterGroove([2, 2, 3])}`,
       `\\ts 4 4 ${rock8([0, 4])}`, `\\ts 7 8 ${meterGroove([2, 2, 3])}`,
+    ],
+  },
+
+  // ---- ek ölçü egzersizleri (gitardaki ölçülerin davuldaki karşılıkları)
+  {
+    id: 'd-t7', diff: 'baslangic', title: '4/4: Vuruşları say', ts: [4, 4],
+    desc: 'Dört dörtlük vuruş, sekizlik hi-hat. Vuruşlardaki hi-hat vurgulu, aradakiler hafif: “BİR-ve-İKİ-ve-ÜÇ-ve-DÖRT-ve”. 1 ve 3’te kick, 2 ve 4’te trampet.',
+    bpm: 80, min: 60, max: 160,
+    bars: [0, 1, 2, 3].map((n) => `:8 ${Array.from({ length: 8 }, (_, i) => {
+      if (i % 2) return H;
+      const b = hit(i % 4 ? S : K, n === 0 && i === 0 ? CR : `${H}{ac}`);
+      return n === 0 && i === 0 ? `${b}{txt "1-2-3-4"}` : b;
+    }).join(' ')}`),
+  },
+  {
+    id: 'd-t8', diff: 'orta', title: '5/8: 3 + 2', ts: [5, 8], tempo: EIGHTH,
+    desc: 'Beş sekizlik hi-hat: üçlü grup kick ile, ikili grup trampetle başlar. “BUM-ta-ta TAK-ta”; ikinci grup hemen gelir, bekleme.',
+    bpm: 140, min: 100, max: 240,
+    bars: [meterGroove([3, 2], { crash: true, label: '3+2' }), ...repeat([meterGroove([3, 2])], 3)],
+  },
+  {
+    id: 'd-t9', diff: 'orta', title: '5/8: 2 + 3', ts: [5, 8], tempo: EIGHTH,
+    desc: 'Aynı beş sekizlik, bu kez önce ikili grup: “BUM-ta TAK-ta-ta”. Vurgunun yeri değişince ritim bambaşka duyulur.',
+    bpm: 140, min: 100, max: 240,
+    bars: [meterGroove([2, 3], { crash: true, label: '2+3' }), ...repeat([meterGroove([2, 3])], 3)],
+  },
+  {
+    id: 'd-t10', diff: 'ileri', title: '7/8: 3 + 2 + 2', ts: [7, 8], tempo: EIGHTH,
+    desc: 'Yedi sekizlik, uzun grup başta: “BUM-ta-ta TAK-ta BUM-ta”. Türk müziğinde devr-i hindî usulü bu gruplamadır.',
+    bpm: 130, min: 100, max: 240,
+    bars: [meterGroove([3, 2, 2], { crash: true, label: '3+2+2' }), ...repeat([meterGroove([3, 2, 2])], 3)],
+  },
+  {
+    id: 'd-t11', diff: 'orta', title: '12/8: Ağır blues', ts: [12, 8], tempo: EIGHTH,
+    desc: 'On iki sekizlik, dört üçlü grup: 1. ve 3. grupta kick, 2. ve 4. grupta trampet. Ölçüyü dört ağır vuruş gibi hisset; metronom her sekizliği tıklar.',
+    bpm: 120, min: 90, max: 220,
+    bars: [meterGroove([3, 3, 3, 3], { crash: true, label: '3+3+3+3' }), ...repeat([meterGroove([3, 3, 3, 3])], 3)],
+  },
+  {
+    id: 'd-t12', diff: 'ileri', title: '6/8’de hemiola: 3 + 3 ve 2 + 2 + 2', ts: [6, 8], tempo: EIGHTH,
+    desc: 'Aynı altı sekizlik iki türlü gruplanır: önce 3 + 3 (iki vuruş), sonra 2 + 2 + 2 (üç vuruş). Hi-hat aynı kalır, yalnızca kick ve trampetin yeri değişir.',
+    bpm: 120, min: 90, max: 220,
+    bars: repeat([meterGroove([3, 3], { label: '3+3' }), meterGroove([2, 2, 2], { label: '2+2+2' })], 2),
+  },
+  {
+    id: 'd-t13', diff: 'ileri', title: 'Ölçü değişimi: 3/4 – 4/4 – 5/4', tsLabel: '3/4 · 4/4 · 5/4',
+    desc: 'Her ölçünün vuruş sayısı değişir: üç, dört, beş, dört. Her ölçünün 1’inde kick; ölçü başlarında sayıyı baştan başlat.',
+    bpm: 90, min: 60, max: 160,
+    bars: ['KSS', 'KSKS', 'KSSKS', 'KSKS'].map((p, n) => `\\ts ${p.length} 4 :4 ${[...p].map((c, i) => {
+      const b = hit(c === 'K' ? K : S, n === 0 && i === 0 ? CR : H);
+      return i ? b : `${b}{txt "${p.length}"}`;
+    }).join(' ')}`),
+  },
+  {
+    id: 'd-t14', diff: 'ileri', title: 'Ölçü değişimi: 5/8 – 7/8', tsLabel: '5/8 · 7/8', tempo: EIGHTH,
+    desc: 'Beş sekizlik (3 + 2) ile yedi sekizlik (2 + 2 + 3) sırayla. Hi-hat sekizlikleri hep eşit; yalnızca ölçünün uzunluğu değişir.',
+    bpm: 130, min: 100, max: 240,
+    bars: [
+      `\\ts 5 8 ${meterGroove([3, 2], { crash: true, label: '3+2' })}`, `\\ts 7 8 ${meterGroove([2, 2, 3], { label: '2+2+3' })}`,
+      `\\ts 5 8 ${meterGroove([3, 2], { label: '3+2' })}`, `\\ts 7 8 ${meterGroove([2, 2, 3], { label: '2+2+3' })}`,
     ],
   },
 ];

@@ -623,15 +623,16 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
   eq(await app.pressed('#segExInst'), ['davul'], 'davulcuya davul egzersizleri');
   eq(await app.pressed('#segExLevel'), ['baslangic'], 'başlangıç seviyesi');
   const davulB = await app.exTitles();
-  assert(davulB.length === 4 && davulB.includes('Temel rock ritmi'), `davul başlangıç: ${davulB}`);
+  assert(davulB.length === 9 && davulB.includes('Temel rock ritmi') && davulB.includes('Çift vuruş (RRLL)'), `davul başlangıç: ${davulB}`);
   await app.click('#segExLevel [data-v="orta"]');
-  assert((await app.exTitles()).includes('Shuffle (triole)'), 'davul orta');
+  const davulO = await app.exTitles();
+  assert(davulO.length === 10 && davulO.includes('Shuffle (triole)') && davulO.includes('Flam ve flam tap'), `davul orta: ${davulO}`);
   await app.click('#segExInst [data-v="gitar"]');
   const gitarO = await app.exTitles();
   assert(gitarO.length === 10 && gitarO.includes('La minör pentatonik') && gitarO.includes('Bend ve vibrato'), `gitar orta: ${gitarO}`);
   await app.click('#segExLevel [data-v="ileri"]');
   assert((await app.exTitles()).includes('Sweep arpej: Am – Dm – E'), 'gitar ileri');
-  // Her egzersiz tek bir enstrüman/seviye altında; toplam 58 (26 eski + 32 yeni)
+  // Her egzersiz tek bir enstrüman/seviye altında; toplam 81 (gitar 40, davul 41)
   let total = 0;
   for (const inst of ['gitar', 'davul']) {
     for (const lv of ['baslangic', 'orta', 'ileri', 'olcu']) {
@@ -642,7 +643,7 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
       total += n;
     }
   }
-  eq(total, 58, 'toplam egzersiz');
+  eq(total, 81, 'toplam egzersiz');
   await app.click('#segExInst [data-v="gitar"]');
   await app.click('#segExLevel [data-v="ileri"]');
   await p.reload();
@@ -669,6 +670,9 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.click('#segExInst [data-v="davul"]');
   await app.click('#segExLevel [data-v="olcu"]');
   assert((await app.exTitles()).includes('7/8: 2 + 2 + 3'), 'davulda da ölçü egzersizi');
+  // Davulda da gitardaki ölçüler var
+  const dts = await p.$$eval('#exList .ex-meta .ts', (els) => els.map((e) => e.textContent));
+  for (const x of ['3/4', '4/4', '5/8', '6/8', '7/8', '9/8', '12/8', '5/4', '3/4 · 4/4 · 5/4', '5/8 · 7/8']) assert(dts.includes(x), `davulda ${x} yok: ${dts}`);
   // Ölçüler ayrı tercihte; seviye eski üçünden biri kalır (Ölçüler'i bilmeyen eski sürüm boş liste göstermesin)
   eq(await app.ev(() => { const x = JSON.parse(localStorage.getItem('ttp-prefs')); return [x.exLevel, x.exOlcu]; }), ['ileri', true], 'ölçüler tercihi');
 
@@ -699,22 +703,22 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.close();
 });
 
-test('çalışma planı: yalnızca gitarda, aşamalar, bugünkü çalışma sırası, ✓, geri dönüş, aşama hatırlanır', async (b, t) => {
+test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sırası, ✓, geri dönüş, aşama enstrümana göre hatırlanır', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   await app.click('#btnEx');
   await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="davul"]');
+  assert(await p.isVisible('#btnPlan'), 'davulda plan kartı');
   await app.click('#segExInst [data-v="gitar"]');
   assert(await p.isVisible('#btnPlan'), 'gitarda plan kartı');
-  await app.click('#segExInst [data-v="davul"]');
-  assert(!(await p.isVisible('#btnPlan')), 'davulda plan kartı yok');
-  await app.click('#segExInst [data-v="gitar"]');
 
-  // Plandaki her egzersiz var ve gitar egzersizi; aşamalar çakışmasın diye kontrol değil, yalnızca geçerlilik
+  // Plandaki her egzersiz var ve o enstrümanın egzersizi; aşamalar çakışmasın diye kontrol değil, yalnızca geçerlilik
   const bad = await app.ev(async () => {
     const P = await import('./js/plan.js?v=__SURUM__');
     const E = await import('./js/egzersiz.js?v=__SURUM__');
-    return P.STAGES.flatMap((st) => P.stageIds(st)).filter((id) => E.findExercise(id)?.inst !== 'gitar');
+    return Object.entries(P.PLANS).flatMap(([inst, plan]) => plan.stages
+      .flatMap((st) => P.stageIds(plan, st)).filter((id) => E.findExercise(id)?.inst !== inst));
   });
   eq(bad, [], 'plandaki egzersizler');
   // Sıra: bugün açılan kalır, sonra en uzun süredir açılmayan (hiç açılmayan önce)
@@ -734,6 +738,7 @@ test('çalışma planı: yalnızca gitarda, aşamalar, bugünkü çalışma sır
 
   await app.click('#btnPlan');
   await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  eq(await app.text('#planTitle'), 'Gitar çalışma planı', 'gitar planı');
   eq(await app.pressed('#segStage'), ['0'], 'ilk aşama');
   const today = () => p.$$eval('#planToday > li', (els) => els.map((li) => [...li.querySelectorAll('[data-id]')].map((e) => e.dataset.id)));
   eq(await today(), [['g-b1'], ['g-b3', 'g-b6'], ['g-b5'], ['g-t2'], []], 'bugünkü çalışma');
@@ -762,6 +767,34 @@ test('çalışma planı: yalnızca gitarda, aşamalar, bugünkü çalışma sır
   await p.waitForSelector('#planView:not([hidden])');
   await app.click('#planBack');
   await p.waitForSelector('#exView:not([hidden])');
+
+  // Davul planı: listede davul seçiliyken açılır, kendi adımları ve kuralları, aşaması gitardan ayrı
+  await app.click('#segExInst [data-v="davul"]');
+  await app.click('#btnPlan');
+  await p.waitForSelector('#planView:not([hidden]) #planToday [data-id^="d-"]');
+  eq(await app.text('#planTitle'), 'Davul çalışma planı', 'davul planı');
+  eq(await app.pressed('#segStage'), ['0'], 'davulda ilk aşama');
+  eq(await today(), [['d-b3'], ['d-b1', 'd-b9'], ['d-b2'], ['d-t7'], []], 'davul bugünkü çalışma');
+  assert((await app.text('#planToday')).includes('Ritim ve fill'), 'davul adımları');
+  assert((await app.text('#planRules')).includes('Çubukları sıkma'), 'davul kuralları');
+  await app.click('#planToday [data-id="d-b1"]');
+  await app.ready();
+  eq(await app.text('#pTitle'), 'Dörtlük ritim', 'plandan davul egzersizi');
+  await app.click('#btnBack');
+  await p.waitForSelector('#planToday [data-id="d-b1"] .done');
+  eq((await today())[1], ['d-b1', 'd-b9'], 'bugün çalışılan davul egzersizi yerinde kalır');
+  await app.click('#segStage [data-v="2"]');
+  eq((await today())[0], ['d-i1'], 'ileri aşama ısınma');
+  assert((await app.text('#planNext')).includes('Bundan sonra'), 'son aşama');
+  await p.reload();
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  eq([await app.text('#planTitle'), await app.pressed('#segStage')], ['Davul çalışma planı', ['2']], 'davul aşaması kalıcı');
+  await app.click('#planBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  await app.click('#btnPlan');
+  await p.waitForSelector('#planView:not([hidden]) #planToday [data-id^="g-"]');
+  eq(await app.pressed('#segStage'), ['1'], 'gitar aşaması ayrı kaldı');
   await app.close();
 });
 
@@ -863,7 +896,7 @@ test('egzersiz: antrenör tempoyu turda bir artırır ve hedefte durur', async (
   await app.close();
 });
 
-test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul ve triole egzersizi çalar', async (b, t) => {
+test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul, triole ve flam egzersizi çalar', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   await app.click('#btnEx');
@@ -876,7 +909,7 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul ve triol
       ids.push(...await p.$$eval('#exList [data-id]', (els) => els.map((e) => e.dataset.id)));
     }
   }
-  eq(ids.length, 58, 'egzersiz sayısı');
+  eq(ids.length, 81, 'egzersiz sayısı');
   for (const id of ids) {
     await app.openEx(id);
     const info = await app.ev(() => ({
@@ -895,7 +928,7 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul ve triol
     if (id.startsWith('g-')) assert(info.profile === 3 && info.chip.includes('Elektro gitar'), `${id} gitar tabı: ${JSON.stringify(info)}`);
     else assert(info.profile === 0 && info.chip.includes('Davul'), `${id} davul notası: ${JSON.stringify(info)}`);
   }
-  for (const id of ['d-o4', 'g-o3']) {
+  for (const id of ['d-o4', 'g-o3', 'd-o10']) {
     await app.openEx(id);
     await app.ev(() => { ttpApi.countInVolume = 0; });
     await app.click('#btnPlay');

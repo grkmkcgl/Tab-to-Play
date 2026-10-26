@@ -3,10 +3,10 @@
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
-import { RULES, STAGES, STEPS, openedToday, pick, stageIds } from './plan.js?v=__SURUM__';
+import { PLANS, openedToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -39,8 +39,9 @@ function loadPrefs() {
     exInst: null,
     exLevel: 'baslangic',
     exOlcu: false,
-    // Çalışma planı: seçili aşama (0–2)
+    // Çalışma planı: seçili aşama (0–2), enstrümana göre (gitarınki eski adıyla)
     planStage: 0,
+    planStageDavul: 0,
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -1233,7 +1234,6 @@ function renderExList() {
   $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
   $('#exList').replaceChildren(...list.map((x) => exRow(x)));
-  $('#btnPlan').hidden = inst !== 'gitar';
 }
 
 // Egzersiz satırı; planda hedef tempo ve bugün çalışıldıysa ✓
@@ -1288,25 +1288,31 @@ $('#exList').addEventListener('click', (e) => {
   if (id) location.hash = `#/egzersiz/${id}`;
 });
 
-// ---------------------------------------------------------------- çalışma planı (gitar)
+// ---------------------------------------------------------------- çalışma planı
+// Egzersiz listesinde seçili enstrümanın planı; seçili aşama her enstrüman için ayrı
+const stageKey = (inst) => (inst === 'davul' ? 'planStageDavul' : 'planStage');
 async function showPlan() {
   showView('planView');
-  document.title = 'Çalışma planı · Tab-to-Play';
+  const title = `${KIND_LABEL[exInst()]} çalışma planı`;
+  $('#planTitle').textContent = title;
+  document.title = `${title} · Tab-to-Play`;
   renderPlan();
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
   renderPlan();
 }
 
 function renderPlan() {
-  const k = clamp(Math.round(prefs.planStage) || 0, 0, STAGES.length - 1);
-  const st = STAGES[k];
+  const inst = exInst();
+  const plan = PLANS[inst];
+  const k = clamp(Math.round(prefs[stageKey(inst)]) || 0, 0, plan.stages.length - 1);
+  const st = plan.stages[k];
   $$('#segStage button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === k)));
-  const ids = stageIds(st);
+  const ids = stageIds(plan, st);
   const reached = ids.filter((id) => (exProgress.get(id)?.s?.speed || 0) >= exTarget(findExercise(id))).length;
   $('#planWhen').textContent = `${st.when} · Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}`;
 
   let n = 0;
-  const steps = STEPS.map((step) => el('li', { class: 'plan-step' },
+  const steps = plan.steps.map((step) => el('li', { class: 'plan-step' },
     el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. ${step.title}` }), el('span', { class: 'muted', text: ` · ${step.min} dk` })),
     el('ul', { class: 'ex-list' }, ...pick(st[step.key], step.n, exProgress).map((id) => exRow(findExercise(id), { plan: true })))));
   steps.push(el('li', { class: 'plan-step' },
@@ -1315,11 +1321,11 @@ function renderPlan() {
     el('button', { class: 'btn', type: 'button', 'data-go': 'lib', text: 'Kütüphaneye git' })));
   $('#planToday').replaceChildren(...steps);
 
-  $('#planRules').replaceChildren(...RULES.map((r) => el('li', { text: r })));
+  $('#planRules').replaceChildren(...plan.rules.map((r) => el('li', { text: r })));
   $('#planNext').replaceChildren(...(st.next
     ? [el('b', { text: 'Sonraki aşamaya ne zaman geçmeli? ' }), st.next]
     : [el('b', { text: 'Bundan sonra: ' }), 'şarkılarda zorlandığın bölümleri döngüye al ve aynı kurallarla çalış; zorlandığın tekniğin egzersizine geri dön.']));
-  $('#planAll').replaceChildren(...STEPS.map((step) => el('section', { class: 'plan-group' },
+  $('#planAll').replaceChildren(...plan.steps.map((step) => el('section', { class: 'plan-group' },
     el('h3', { text: step.title }),
     el('ul', { class: 'ex-list' }, ...st[step.key].map((id) => exRow(findExercise(id), { plan: true }))))));
 }
@@ -1332,7 +1338,7 @@ $('#planBack').addEventListener('click', () => {
 $('#segStage').addEventListener('click', (e) => {
   const v = e.target.closest('button')?.dataset.v;
   if (v == null) return;
-  prefs.planStage = Number(v);
+  prefs[stageKey(exInst())] = Number(v);
   savePrefs();
   renderPlan();
 });
