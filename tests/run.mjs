@@ -703,6 +703,51 @@ test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 öl�
   await app.close();
 });
 
+test('çift dokunma yakınlaştırmaz, iki parmakla yakınlaştırma açık', async (b, t) => {
+  const app = await App.open(b, t);
+  await app.addDemo();
+  const r = await app.ev(() => ({
+    html: getComputedStyle(document.documentElement).touchAction,
+    viewport: document.querySelector('meta[name="viewport"]').content,
+    btn: getComputedStyle(document.querySelector('#btnPlay')).userSelect,
+  }));
+  eq(r.html, 'manipulation', 'çift dokunma yakınlaştırması kapalı');
+  assert(!/user-scalable\s*=\s*no|maximum-scale/.test(r.viewport), `iki parmakla yakınlaştırma açık kalmalı: ${r.viewport}`);
+  eq(r.btn, 'none', 'düğmede yazı seçimi yok');
+  await app.close();
+});
+
+test('siyah arka plan: ayarlardan ve görünüm panelinden açılır, nota açık renk çizilir, kalıcıdır', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  const state = () => app.ev(() => ({
+    cls: document.documentElement.classList.contains('siyah'),
+    bg: getComputedStyle(document.body).backgroundColor,
+    pref: JSON.parse(localStorage.getItem('ttp-prefs')).dark ?? false,
+  }));
+  eq((await state()).cls, false, 'varsayılan kapalı');
+  await app.click('#btnSettings');
+  await app.click('label:has(#darkSet)');
+  eq(await state(), { cls: true, bg: 'rgb(0, 0, 0)', pref: true }, 'ayarlardan açıldı');
+  await app.ev(() => document.querySelector('#settingsDlg').close());
+  await app.addDemo();
+  const glyph = () => app.ev(() => { const c = ttpApi.settings.display.resources.mainGlyphColor; return [c.r, c.g, c.b]; });
+  eq(await glyph(), [236, 236, 236], 'nota açık renk');
+  eq(await app.ev(() => getComputedStyle(document.querySelector('#sheetWrap')).backgroundColor), 'rgb(0, 0, 0)', 'nota zemini siyah');
+  await app.panel('view');
+  assert(await p.isChecked('#darkSheet'), 'panelde de açık görünür');
+  await app.click('label:has(#darkSheet)');
+  await p.waitForFunction(() => document.querySelectorAll('#sheet svg').length > 0);
+  eq(await glyph(), [0, 0, 0], 'kapatınca siyah nota');
+  eq((await state()).cls, false, 'kapandı');
+  await app.click('label:has(#darkSheet)');
+  await p.reload();
+  await app.ready();
+  eq((await state()).cls, true, 'kalıcı');
+  eq(await glyph(), [236, 236, 236], 'yeniden açılışta açık renk nota');
+  await app.close();
+});
+
 test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sırası, ✓, geri dönüş, aşama enstrümana göre hatırlanır', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;

@@ -42,6 +42,8 @@ function loadPrefs() {
     // Çalışma planı: seçili aşama (0–2), enstrümana göre (gitarınki eski adıyla)
     planStage: 0,
     planStageDavul: 0,
+    // Siyah arka plan (uygulama ve nota)
+    dark: false,
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -433,8 +435,26 @@ function staveFor(info) {
   return { tab: at.StaveProfile.Tab, nota: at.StaveProfile.Score, ikisi: at.StaveProfile.ScoreTab }[prefs.stave] ?? at.StaveProfile.Tab;
 }
 
+// Siyah arka planda nota renkleri; kapalıyken alphaTab'ın kendi renkleri
+const SHEET_LIGHT = new at.Settings().display.resources;
+const SHEET_DARK = {
+  staffLineColor: [105, 105, 105], barSeparatorColor: [150, 150, 150], barNumberColor: [255, 140, 90],
+  mainGlyphColor: [236, 236, 236], secondaryGlyphColor: [150, 150, 150], scoreInfoColor: [236, 236, 236],
+};
+function applySheetColors(res) {
+  for (const [k, rgb] of Object.entries(SHEET_DARK)) res[k] = prefs.dark ? new at.model.Color(...rgb, 255) : SHEET_LIGHT[k];
+}
+
+function applyTheme() {
+  document.documentElement.classList.toggle('siyah', !!prefs.dark);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', prefs.dark ? '#000000' : '#17130f');
+  $$('[data-dark]').forEach((c) => { c.checked = !!prefs.dark; });
+}
+applyTheme();
+
 function applyDisplay() {
   const st = api.settings;
+  applySheetColors(st.display.resources);
   st.display.staveProfile = staveFor(cur?.tracks[shown]);
   // Yalnızca tab gösterilirken ritim (sap ve kirişler) tabın altına çizilsin
   st.notation.rhythmMode = st.display.staveProfile === at.StaveProfile.Tab ? at.TabRhythmMode.ShowWithBars : at.TabRhythmMode.Automatic;
@@ -1116,6 +1136,12 @@ $('#p-view').addEventListener('click', (e) => {
   updateViewUi();
   rerender();
 });
+$$('[data-dark]').forEach((c) => c.addEventListener('change', (e) => {
+  prefs.dark = e.target.checked;
+  savePrefs();
+  applyTheme();
+  rerender();
+}));
 $('#follow').addEventListener('change', (e) => {
   prefs.follow = e.target.checked;
   savePrefs();

@@ -19,8 +19,25 @@
   color-scheme: dark;
 }
 
+:root.siyah {
+  --bg: #000;
+  --panel: #0e0e0e;
+  --panel-2: #181818;
+  --line: #2c2c2c;
+  --paper: #000;
+  --ink: #ececec;
+}
+:root.siyah .spinner { border-color: #333; border-top-color: var(--cursor); }
+:root.siyah .at-selection div { background: rgba(255, 140, 40, .13); }
+:root.siyah .at-cursor-bar { background: rgba(255, 165, 58, .12); }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* Çift dokunma yakınlaştırmasın (tablette yanlışlıkla iki kez basınca sayfa büyüyordu);
+   iki parmakla yakınlaştırma ve kaydırma çalışmaya devam eder. Alt öğelere de geçer. */
+html { touch-action: manipulation; }
+/* Düğmelere hızlı iki dokunuş yazı seçmesin */
+button, .seg, .ctl, .chip { -webkit-user-select: none; user-select: none; }
 body {
   background: var(--bg);
   color: var(--text);
