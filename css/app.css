@@ -451,6 +451,17 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .m-beats i.first { border-color: var(--accent); }
 .m-beats i.on { background: var(--text); transform: scale(1.15); }
 .m-beats i.first.on { background: var(--accent); }
+/* Aksak: her sekizliğe bir ışık; grup başları büyük, gruplar arası boşluk */
+.m-beats.aksak { gap: 5px; align-items: center; }
+.m-beats.aksak i { width: 14px; height: 14px; }
+.m-beats.aksak i.gs { width: 22px; height: 22px; }
+.m-beats.aksak i.gs:not(:first-child) { margin-left: 10px; }
+.m-box { display: flex; flex-direction: column; gap: 12px; }
+.m-box[hidden] { display: none; }
+.seg.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); }
+.seg.grid3 button { min-height: 44px; padding: 4px 4px; font-size: 14px; border-left: 0; border-top: 1px solid var(--line); }
+.seg.grid3 button:nth-child(-n+3) { border-top: 0; }
+.seg.grid3 button:not(:nth-child(3n+1)) { border-left: 1px solid var(--line); }
 .m-bpm { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
 .m-bpm output { font-size: 64px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1; }
 .m-bpm span { color: var(--muted); font-weight: 600; }

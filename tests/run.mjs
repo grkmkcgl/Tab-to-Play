@@ -1241,7 +1241,7 @@ test('egzersiz: listede hepsi var; her seviyeden örnek açılır, çizilir; git
   await app.close();
 }, { webkit: true });
 
-test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, çalar ve durur, tercihler kalıcı', async (b, t) => {
+test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, aksak ölçü, çalar ve durur, tercihler kalıcı', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   await app.click('#btnEx');
@@ -1285,6 +1285,26 @@ test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, çalar ve durur, t
   await p.reload();
   await p.waitForSelector('#metroView:not([hidden])');
   eq([await app.text('#mBpm'), await app.pressed('#segBeats'), await app.pressed('#segSub')], ['240', ['3'], ['3']], 'tercihler kalıcı');
+  // Aksak ölçü: her sekizliğe bir ışık, grup başları büyük; ölçü başı güçlü, grup başları orta tık
+  eq(await app.pressed('#segMeter'), ['duz'], 'düz ölçü');
+  await app.click('#segMeter [data-v="aksak"]');
+  eq(await app.pressed('#segGroups'), ['2+2+3'], 'varsayılan 7/8');
+  assert(!(await p.isVisible('#segBeats')) && await p.isVisible('#segGroups'), 'aksakta düz ayarlar gizli');
+  eq([await p.$$eval('#mBeats i', (els) => els.length), await p.$$eval('#mBeats i.gs', (els) => els.length)], [7, 3], '7 sekizlik, 3 grup');
+  await app.click('#segGroups [data-v="3+2+2"]');
+  await app.ev(() => { ttpMetro.trace = []; });
+  await app.click('#mPlay');
+  await p.waitForFunction(() => ttpMetro.trace.length >= 14);
+  await app.click('#mPlay');
+  const bar = ['accent', 'sub', 'sub', 'beat', 'sub', 'beat', 'sub'];
+  eq(await app.ev(() => ttpMetro.trace.slice(0, 14)), [...bar, ...bar], '3+2+2 vurgu deseni');
+  await app.click('#segGroups [data-v="3+3+3+3"]');
+  eq(await p.$$eval('#mBeats i', (els) => els.length), 12, '12/8');
+  await p.reload();
+  await p.waitForSelector('#metroView:not([hidden])');
+  eq([await app.pressed('#segMeter'), await app.pressed('#segGroups')], [['aksak'], ['3+3+3+3']], 'aksak kalıcı');
+  await app.click('#segMeter [data-v="duz"]');
+  eq(await p.$$eval('#mBeats i', (els) => els.length), 3, 'düze dönünce eski ölçü');
   // Ekrandan çıkınca susar
   await app.click('#mPlay');
   await p.waitForFunction(() => ttpMetro.running);
@@ -1329,6 +1349,9 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.ev(() => { location.hash = '#/metronom'; });
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');
+  await app.click('#segMeter [data-v="aksak"]');
+  await app.click('#segGroups [data-v="3+3+3+3"]');
+  ok(await fits(), 'metronom aksak 12/8');
   await app.close();
 }, { webkit: true });
 

@@ -51,6 +51,8 @@ function loadPrefs() {
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
+    mMeter: 'duz', // duz | aksak
+    mGroups: '2+2+3', // aksakta seçili gruplama
     mSub: 1,
     mAccent: true,
     mVol: 80,
@@ -1705,7 +1707,11 @@ function lineChart(box, sel, data, { ref, refLabel }) {
 const metro = new Metronome();
 window.ttpMetro = metro; // testler için
 
+// Aksak ölçüler (metronom ekranındaki seçenekler): sekizlik grupları
+const AKSAK = ['3+2', '2+3', '3+3', '2+2+3', '3+2+2', '2+3+2', '2+2+2+3', '3+3+2+2', '3+3+3+3'];
 function applyMetroPrefs() {
+  if (!AKSAK.includes(prefs.mGroups)) prefs.mGroups = '2+2+3';
+  metro.groups = prefs.mMeter === 'aksak' ? prefs.mGroups.split('+').map(Number) : null;
   metro.bpm = clamp(Math.round(prefs.mBpm) || 80, EX_BPM_MIN, EX_BPM_MAX);
   metro.beats = clamp(Math.round(prefs.mBeats) || 4, 2, 7);
   metro.sub = clamp(Math.round(prefs.mSub) || 1, 1, 4);
@@ -1718,14 +1724,26 @@ function updateMetroUi() {
   $('#mRange').value = metro.bpm;
   $$('#segBeats button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.beats)));
   $$('#segSub button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.sub)));
+  const aksak = !!metro.groups;
+  $$('#segMeter button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === (aksak ? 'aksak' : 'duz'))));
+  $$('#segGroups button').forEach((b) => b.setAttribute('aria-pressed', String(aksak && b.dataset.v === prefs.mGroups)));
+  $('#duzBox').hidden = aksak;
+  $('#aksakBox').hidden = !aksak;
   $('#mAccent').checked = metro.accent;
   $('#mVol').value = Math.round(metro.vol * 100);
   $('use', $('#mPlay')).setAttribute('href', metro.running ? '#i-pause' : '#i-play');
   $('#mPlay span').textContent = metro.running ? 'Durdur' : 'Başlat';
   $('#mPlay').setAttribute('aria-pressed', String(metro.running));
+  // Işıklar: düzde vuruş başına bir, aksakta sekizlik başına bir (grup başları büyük)
   const dots = $('#mBeats');
-  if (dots.children.length !== metro.beats) {
-    dots.replaceChildren(...Array.from({ length: metro.beats }, (_, i) => el('i', { class: i === 0 ? 'first' : '' })));
+  const key = aksak ? prefs.mGroups : String(metro.beats);
+  if (dots.dataset.key !== key) {
+    dots.dataset.key = key;
+    dots.classList.toggle('aksak', aksak);
+    const starts = new Set();
+    if (aksak) metro.groups.reduce((at, g) => { starts.add(at); return at + g; }, 0);
+    const n = aksak ? metro.groups.reduce((a, b) => a + b, 0) : metro.beats;
+    dots.replaceChildren(...Array.from({ length: n }, (_, i) => el('i', { class: [i === 0 ? 'first' : '', starts.has(i) ? 'gs' : ''].join(' ').trim() })));
   }
 }
 
@@ -1772,6 +1790,24 @@ $('#segBeats').addEventListener('click', (e) => {
   const v = Number(e.target.closest('button')?.dataset.v);
   if (!v) return;
   prefs.mBeats = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
+$('#segMeter').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.mMeter = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
+$('#segGroups').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.mGroups = v;
   savePrefs();
   applyMetroPrefs();
   metro.restartBar();

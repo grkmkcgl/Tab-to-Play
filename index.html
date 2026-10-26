@@ -253,14 +253,30 @@
     <input id="mRange" type="range" min="30" max="240" step="1" value="80" aria-label="Tempo (BPM)">
     <button id="mPlay" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Başlat</span></button>
     <button id="mTap" class="btn" type="button">Vuruşla ayarla <small class="muted">(tempoda birkaç kez dokun)</small></button>
-    <div class="field"><span>Ölçüdeki vuruş</span>
-      <div class="seg wide" id="segBeats" role="group" aria-label="Ölçüdeki vuruş">
-        <button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5</button><button type="button" data-v="6">6</button><button type="button" data-v="7">7</button>
+    <div class="field"><span>Ölçü</span>
+      <div class="seg wide" id="segMeter" role="group" aria-label="Ölçü tipi">
+        <button type="button" data-v="duz">Düz (x/4)</button><button type="button" data-v="aksak">Aksak (x/8)</button>
       </div>
     </div>
-    <div class="field"><span>Bölüm</span>
-      <div class="seg wide" id="segSub" role="group" aria-label="Vuruşun bölümü">
-        <button type="button" data-v="1">Dörtlük</button><button type="button" data-v="2">Sekizlik</button><button type="button" data-v="3">Triole</button><button type="button" data-v="4">16'lık</button>
+    <div id="duzBox" class="m-box">
+      <div class="field"><span>Ölçüdeki vuruş</span>
+        <div class="seg wide" id="segBeats" role="group" aria-label="Ölçüdeki vuruş">
+          <button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5</button><button type="button" data-v="6">6</button><button type="button" data-v="7">7</button>
+        </div>
+      </div>
+      <div class="field"><span>Bölüm</span>
+        <div class="seg wide" id="segSub" role="group" aria-label="Vuruşun bölümü">
+          <button type="button" data-v="1">Dörtlük</button><button type="button" data-v="2">Sekizlik</button><button type="button" data-v="3">Triole</button><button type="button" data-v="4">16'lık</button>
+        </div>
+      </div>
+    </div>
+    <div id="aksakBox" class="m-box" hidden>
+      <div class="field"><span>Aksak ölçü <small>(tempo dakikadaki sekizlik sayısı; grup başları vurgulu)</small></span>
+        <div class="seg grid3" id="segGroups" role="group" aria-label="Aksak ölçü">
+          <button type="button" data-v="3+2">5/8 · 3+2</button><button type="button" data-v="2+3">5/8 · 2+3</button><button type="button" data-v="3+3">6/8 · 3+3</button>
+          <button type="button" data-v="2+2+3">7/8 · 2+2+3</button><button type="button" data-v="3+2+2">7/8 · 3+2+2</button><button type="button" data-v="2+3+2">7/8 · 2+3+2</button>
+          <button type="button" data-v="2+2+2+3">9/8 · 2+2+2+3</button><button type="button" data-v="3+3+2+2">10/8 · 3+3+2+2</button><button type="button" data-v="3+3+3+3">12/8 · 3+3+3+3</button>
+        </div>
       </div>
     </div>
     <label class="switch"><input type="checkbox" id="mAccent"><span>İlk vuruş vurgulu</span></label>
