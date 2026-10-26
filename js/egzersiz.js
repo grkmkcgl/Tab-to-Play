@@ -10,7 +10,7 @@ export const exTempo = (ex) => ex.tempo ?? EX_TEMPO;
 export const EX_BPM_MIN = 30;
 export const EX_BPM_MAX = 240;
 
-export const LEVELS = { baslangic: 'Başlangıç', orta: 'Orta', ileri: 'İleri', olcu: 'Ölçüler' };
+export const LEVELS = { baslangic: 'Başlangıç', orta: 'Orta', ileri: 'İleri', olcu: 'Ölçüler', rehber: 'Rehber' };
 export const EX_INST = { gitar: 'Elektro gitar', davul: 'Davul' };
 
 // ---------------------------------------------------------------- yardımcılar
@@ -506,9 +506,10 @@ const S = 'snarehit';
 const H = 'hihatclosed';
 const RD = 'ridemiddle';
 const CR = 'crashhighhit';
-const T1 = 'hightomhit';
-const T2 = 'lowtomhit';
-const FT = 'lowfloortomhit'; // GP adları yanıltıcı: highfloortomhit en tiz tom (MIDI 50)
+const T1 = 'hightomhit'; // tiz tom: üstten ikinci çizgi
+// Orta tom: orta çizgi. (lowtomhit olsaydı notada yer tomuyla aynı aralığa düşerdi.)
+const T2 = 'midtomhit';
+const FT = 'lowfloortomhit'; // yer tomu: alttan ikinci aralık. GP adları yanıltıcı: highfloortomhit en tiz tom (MIDI 50)
 const HO = 'hihatopen';
 const HP = 'pedalhihathit'; // ayakla hi-hat
 const hit = (...xs) => (xs.length > 1 ? `(${xs.join(' ')})` : xs[0]);
@@ -917,11 +918,52 @@ const meter = (e) => ({
   desc: e.tempo === EIGHTH ? `${e.desc} Tempo dakikadaki sekizlik sayısı.` : e.desc,
 });
 
+// ---------------------------------------------------------------- nota okuma rehberi
+// Rehber notaları egzersiz gibi çalarda açılır (görülür ve dinlenir) ama listede, planda ve
+// geçmişte yer almaz (`guide: true`). Açıklamaları index.html'de (#guideView).
+const named = (tok, txt) => fx(tok, `txt "${txt}"`);
+const GUIDES = [
+  {
+    id: 'r-davul', inst: 'davul', title: 'Davul notası anahtarı',
+    desc: 'Her ölçüde bir davul ya da zil, adı notanın üstünde. Yukarıdan aşağıya: ziller, tomlar ve trampet, en altta ayakla çalınanlar. Son ölçülerde vurgu, ghost, flam, el sırası ve triole.',
+    bpm: 60, min: 30, max: 120,
+    bars: [
+      [CR, 'Crash'], [H, 'Hi-hat'], [HO, 'Açık hi-hat'], [RD, 'Ride'], ['ridebell', 'Ride çanı'],
+      [T1, 'Tiz tom'], [T2, 'Orta tom'], [S, 'Trampet'], ['snaresidestick', 'Side stick'], [FT, 'Yer tomu'],
+      [K, 'Kick'], [HP, 'Ayak hi-hat'],
+    ].map(([d, t]) => `:4 ${named(d, t)} r :2 r`).concat(
+      `:4 ${named(`${S}{ac}`, 'Vurgu')} ${named(`${S}{g}`, 'Ghost')} :8 ${S}{gr ob} :4 ${named(S, 'Flam')} ${named(S, 'R')}`,
+      `:8 ${named(tu(S), 'Triole')} ${tu(S)} ${tu(S)} :4 r :2 r`,
+    ),
+  },
+  {
+    id: 'r-gitar', inst: 'gitar', title: 'Tab işaretleri', prog: CLEAN,
+    desc: 'Tab’daki her çizgi bir tel, rakam basılacak perde. Her ölçüde bir işaret, adı notanın üstünde; dinleyerek nasıl duyulduğuna da bak.',
+    bpm: 60, min: 30, max: 120,
+    bars: [
+      `:2 ${named('3.2', '3. perde · 2. tel')} r`,
+      `:2 ${named('0.1', 'Açık tel')} r`,
+      `:4 ${named('5.3{h}', 'Çekiç')} 7.3 ${named('7.3{h}', 'Çekme')} 5.3`,
+      `:2 ${named('5.3{sl}', 'Kaydırma')} 7.3`,
+      `:2 ${named('7.3{b (0 4)}', 'Bend')} r`,
+      `:2 ${named('7.3{v}', 'Vibrato')} r`,
+      `:4 ${named('0.6{pm}', 'Palm mute')} 0.6{pm} 0.6{pm} 0.6{pm}`,
+      `:4 ${named('x.6', 'Ölü nota')} x.6 x.6 x.6`,
+      `:2 ${named('12.3{nh}', 'Flajole')} ${named('5.3{g}', 'Ghost')}`,
+      `:4 ${named('5.3{ac}', 'Vurgu')} 5.3 5.3{ac} 5.3`,
+      `:2 ${named('(0.6{lr} 2.5{lr} 2.4{lr})', 'Bırak çınlasın')} r`,
+      `:4 ${named('5.3{sd}', 'Aşağı')} ${named('5.3{su}', 'Yukarı')} 5.3{sd} 5.3{su}`,
+      `:4 ${named('5.3{tp 16}', 'Tremolo')} 5.3{tp 16} 5.3{tp 16} 5.3{tp 16}`,
+    ],
+  },
+];
+
 export const EXERCISES = [
   ...GUITAR.map((e) => ({ ...e, inst: 'gitar' })),
   ...GUITAR_TS.map((e) => ({ ...meter(e), inst: 'gitar' })),
   ...DRUMS.map((e) => ({ ...e, inst: 'davul' })),
   ...DRUMS_TS.map((e) => ({ ...meter(e), inst: 'davul' })),
+  ...GUIDES.map((e) => ({ ...e, level: 'rehber', guide: true })),
 ];
 
 // Ölçü etiketi ("5/8", "3/4 · 4/4 · 5/4"); 4/4 ve ölçü egzersizi olmayanlar için boş

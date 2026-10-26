@@ -1008,6 +1008,55 @@ test('yedekleme: hepsi tek dosyaya iner, başka cihazda geri yüklenir, ikinci y
   await app2.close();
 });
 
+test('nota okuma rehberi: davul ve gitar, açıklamalar, notada gör ve dinle, çalışma sayılmaz, geri dönüş', async (b, t) => {
+  const app = await App.open(b, t, { inst: 'davul' });
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#btnGuide');
+  await p.waitForSelector('#guideView:not([hidden])');
+  eq(await app.pressed('#segGuide'), ['davul'], 'davulcuya davul rehberi');
+  const davul = await app.text('[data-guide="davul"]');
+  for (const w of ['Kick', 'Ayak hi-hat', 'Trampet', 'ghost', 'flam']) assert(davul.includes(w), `davul rehberinde ${w}`);
+  assert(!(await p.isVisible('[data-guide="gitar"]')), 'gitar bölümü gizli');
+  // Notada gör ve dinle: çalarda açılır, çalınır; rehber çalışma geçmişine yazılmaz
+  await app.click('[data-open="r-davul"]');
+  await app.ready();
+  eq([await app.text('#pTitle'), await app.text('#pArtist')], ['Davul notası anahtarı', 'Davul · Rehber'], 'rehber notası');
+  eq(await app.ev(() => ttpApi.score.masterBars.length), 14, 'her davula bir ölçü + işaretler');
+  await app.ev(() => { ttpApi.countInVolume = 0; });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1 && ttpApi.timePosition > 500, null, { timeout: 10000 });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 0);
+  await app.ev(() => ttpPractice(30));
+  eq(await app.ev(async () => { const { db } = await import('./js/db.js?v=__SURUM__'); return (await db.allDays()).length; }), 0, 'rehber çalışma sayılmaz');
+  await app.click('#btnBack');
+  await p.waitForSelector('#guideView:not([hidden])');
+  await app.click('#segGuide [data-v="gitar"]');
+  const gitar = await app.text('[data-guide="gitar"]');
+  for (const w of ['ince Mi', 'çekiç', 'palm mute', 'flajole']) assert(gitar.includes(w), `gitar rehberinde ${w}`);
+  await app.click('[data-open="r-gitar"]');
+  await app.ready();
+  eq([await app.text('#pTitle'), await app.ev(() => ttpApi.settings.display.staveProfile)], ['Tab işaretleri', 3], 'tab rehberi tab olarak');
+  await app.click('#btnBack');
+  await p.waitForSelector('#guideView:not([hidden])');
+  await app.click('#guideBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  // Çalardaki Görünüm panelinden: çalınan partiye göre rehber, geri dönünce çalar
+  await app.click('#exBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.addDemo();
+  await app.panel('view');
+  await app.click('#viewGuide');
+  await p.waitForSelector('#guideView:not([hidden])');
+  eq(await app.pressed('#segGuide'), ['davul'], 'davul partisi açıkken davul rehberi');
+  await app.click('#guideBack');
+  await app.ready();
+  eq(await app.text('#pTitle'), 'Deneme Riffi', 'çalara döndü');
+  await app.close();
+}, { webkit: true });
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -1262,6 +1311,9 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.ev(() => { location.hash = '#/gecmis'; });
   await app.page.waitForSelector('#histView:not([hidden])');
   ok(await fits(), 'çalışma geçmişi');
+  await app.ev(() => { location.hash = '#/rehber'; });
+  await app.page.waitForSelector('#guideView:not([hidden])');
+  ok(await fits(), 'nota okuma rehberi');
   await app.ev(() => { location.hash = '#/metronom'; });
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');

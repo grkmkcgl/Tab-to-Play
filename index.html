@@ -37,6 +37,7 @@
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 5h6v2H7v10h10v-4h2v6H5z"/></symbol>
   <symbol id="i-metro" viewBox="0 0 24 24"><path d="M9.2 3h5.6l4.4 18H4.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6.6 16h10.8M12 16l5-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-plan" viewBox="0 0 24 24"><path d="M5 3h14v18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8 8 1.5 1.5L12 7M8 14l1.5 1.5L12 13M14 8.5h2.5M14 14.5h2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-guide" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.5 4 12 5.5v14c-2.5-1.5-5.5-1.5-8 0zM20 5.5C17.5 4 14.5 4 12 5.5v14c2.5-1.5 5.5-1.5 8 0z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
 </svg>
@@ -93,6 +94,10 @@
     <button id="btnPlan" class="metro-card plan-card" type="button">
       <svg class="ic"><use href="#i-plan"/></svg>
       <span><b>Çalışma planı</b><small>Her gün ne çalışacağını adım adım gösterir.</small></span>
+    </button>
+    <button id="btnGuide" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-guide"/></svg>
+      <span><b>Nota okuma rehberi</b><small>Davul notası ve tab işaretleri: ne anlama gelir, nasıl duyulur.</small></span>
     </button>
     <button id="btnHist" class="metro-card" type="button">
       <svg class="ic"><use href="#i-chart"/></svg>
@@ -156,6 +161,76 @@
       </div>
       <h2 class="plan-h">Günler</h2>
       <ol id="hList" class="hist-list"></ol>
+    </div>
+  </div>
+</section>
+
+<!-- Nota okuma rehberi -->
+<section id="guideView" class="view" hidden>
+  <header class="topbar">
+    <button id="guideBack" class="icon-btn" type="button" aria-label="Geri dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Nota okuma rehberi</h1>
+  </header>
+  <div class="ex-wrap guide">
+    <div class="seg wide" id="segGuide" role="group" aria-label="Rehber">
+      <button type="button" data-v="davul">🥁 Davul notası</button><button type="button" data-v="gitar">🎸 Gitar tabı</button>
+    </div>
+
+    <div data-guide="davul">
+      <button class="btn primary guide-open" type="button" data-open="r-davul">Notada gör ve dinle</button>
+      <h2 class="plan-h">Nota başının şekli</h2>
+      <ul class="guide-list">
+        <li><b>Dolu yuvarlak:</b> davul — trampet, tomlar, kick.</li>
+        <li><b>x:</b> zil — hi-hat, ride, crash. Trampetin yerinde x ise <b>side stick</b>: çubuğu trampetin kenarına yatırıp vur.</li>
+        <li><b>Daire içinde x:</b> açık hi-hat. <b>Elmas:</b> ride çanı.</li>
+      </ul>
+      <h2 class="plan-h">Yüksekliği: hangi davul</h2>
+      <dl class="guide-keys">
+        <dt>Crash</dt><dd>portenin üstünde, ek çizgide (x)</dd>
+        <dt>Hi-hat</dt><dd>en üst çizginin hemen üstünde (x)</dd>
+        <dt>Ride</dt><dd>en üst çizgide (x)</dd>
+        <dt>Tiz tom</dt><dd>üstten ikinci çizgide</dd>
+        <dt>Trampet</dt><dd>üstten ikinci aralıkta</dd>
+        <dt>Orta tom</dt><dd>orta çizgide</dd>
+        <dt>Yer tomu</dt><dd>alttan ikinci aralıkta</dd>
+        <dt>Kick</dt><dd>en alt çizgide</dd>
+        <dt>Ayak hi-hat</dt><dd>portenin altında (x), ayakla kapatılır</dd>
+      </dl>
+      <p class="muted small">Kısaca: yukarıda ziller, ortada trampet ve tomlar, en altta ayakla çalınanlar.</p>
+      <h2 class="plan-h">İşaretler</h2>
+      <ul class="guide-list">
+        <li><b>&gt;</b> vurgu: o notayı diğerlerinden yüksek vur.</li>
+        <li><b>( )</b> parantez içinde nota: ghost — neredeyse duyulmayacak kadar hafif.</li>
+        <li><b>Küçük nota:</b> asıl notanın hemen önünde: flam — iki vuruş neredeyse aynı anda, küçük olan alçaktan.</li>
+        <li><b>R / L</b> notanın üstünde: sağ el / sol el.</li>
+        <li><b>3</b> yazan grup: triole — bir vuruşa üç eşit nota.</li>
+      </ul>
+    </div>
+
+    <div data-guide="gitar" hidden>
+      <button class="btn primary guide-open" type="button" data-open="r-gitar">Notada gör ve dinle</button>
+      <h2 class="plan-h">Tab nasıl okunur?</h2>
+      <ul class="guide-list">
+        <li>Altı çizgi altı tel: <b>en üst çizgi ince Mi</b> (1. tel), <b>en alt çizgi kalın Mi</b> (6. tel).</li>
+        <li>Rakam o telde basılacak perde; <b>0</b> açık tel. Aynı hizadaki rakamlar birlikte çalınır (akor).</li>
+        <li>Ritim, rakamların altındaki saplardan okunur (ya da Görünüm'de <b>İkisi</b> seçilince üstteki notadan).</li>
+      </ul>
+      <h2 class="plan-h">İşaretler</h2>
+      <dl class="guide-keys">
+        <dt>H</dt><dd>çekiç (hammer-on): ilk notayı penala, ikincisini yalnızca sol elle perdeye vurarak çıkar</dd>
+        <dt>P</dt><dd>çekme (pull-off): parmağı telden çekerek alttaki notayı çıkar</dd>
+        <dt>sl.</dt><dd>kaydırma (slide): parmağı teli bırakmadan öteki perdeye kaydır</dd>
+        <dt>Ok, full / ½</dt><dd>bend: teli iterek sesi bir ses (full) ya da yarım ses (½) yükselt</dd>
+        <dt>Dalgalı çizgi</dt><dd>vibrato: teli hafifçe sallayarak sesi titret</dd>
+        <dt>P.M.</dt><dd>palm mute: sağ elin kenarı köprüye yakın tellere değsin</dd>
+        <dt>x</dt><dd>ölü nota: teli sol elle boğ, perdeye basma; tok, perdesiz bir ses</dd>
+        <dt>&lt;12&gt;, N.H.</dt><dd>flajole: parmağı telin üstüne yalnızca değdir, basma</dd>
+        <dt>( )</dt><dd>ghost: çok hafif çalınan nota</dd>
+        <dt>&gt;</dt><dd>vurgu: o notayı daha güçlü çal</dd>
+        <dt>Let Ring</dt><dd>bırak çınlasın: notalar birbirinin üstüne çalsın, parmağı kaldırma</dd>
+        <dt>⊓ / V</dt><dd>aşağı / yukarı penalama</dd>
+        <dt>Sapta çizgiler</dt><dd>tremolo: aynı notayı çok hızlı tekrarla</dd>
+      </dl>
     </div>
   </div>
 </section>
@@ -262,6 +337,7 @@
 
     <div id="p-view" class="panel" hidden role="dialog" aria-label="Görünüm">
       <div class="panel-head"><h3>Görünüm</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <button id="viewGuide" class="btn small-btn guide-link" type="button"><svg class="ic"><use href="#i-guide"/></svg>Nota okuma rehberi</button>
       <div class="field"><span>Gösterim</span>
         <div class="seg" id="segStave">
           <button type="button" data-v="tab">Tab</button><button type="button" data-v="nota">Nota</button><button type="button" data-v="ikisi">İkisi</button>

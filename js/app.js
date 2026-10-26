@@ -204,7 +204,7 @@ async function checkInbox() {
 }
 
 // ---------------------------------------------------------------- görünümler
-const VIEWS = ['libView', 'exView', 'planView', 'histView', 'metroView', 'playerView'];
+const VIEWS = ['libView', 'exView', 'planView', 'histView', 'guideView', 'metroView', 'playerView'];
 // Başka bir görünüme geçerken çalanı durdur
 function showView(id) {
   if (id !== 'playerView') {
@@ -1310,7 +1310,7 @@ function practiceTick() {
 }
 
 async function addPractice(song, sec) {
-  if (!song || sec < 0.5) return;
+  if (!song || sec < 0.5 || song.ex?.guide) return; // rehber çalışma sayılmaz
   const ex = song.ex;
   const bpm = Math.round(ex ? song.s.speed : ((song.tempo || 0) * song.s.speed) / 100);
   const steady = sec >= BPM_SEC && bpm > 0;
@@ -1474,6 +1474,40 @@ $('#planView').addEventListener('click', (e) => {
   if (e.target.closest('[data-go="lib"]')) { location.hash = '#/'; return; }
   const id = e.target.closest('[data-id]')?.dataset.id;
   if (id) location.hash = `#/egzersiz/${id}`;
+});
+
+// ---------------------------------------------------------------- nota okuma rehberi
+// Açıklamalar index.html'de; notalar egzersiz gibi çalarda açılır (r-davul, r-gitar)
+let guideInst = null;
+function showGuide() {
+  showView('guideView');
+  document.title = 'Nota okuma rehberi · Tab-to-Play';
+  guideInst ||= exInst();
+  renderGuide();
+}
+function renderGuide() {
+  $$('#segGuide button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === guideInst)));
+  $$('[data-guide]').forEach((d) => { d.hidden = d.dataset.guide !== guideInst; });
+}
+$('#segGuide').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  guideInst = v;
+  renderGuide();
+});
+$('#guideView').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-open]')?.dataset.open;
+  if (id) location.hash = `#/egzersiz/${id}`;
+});
+$('#btnGuide').addEventListener('click', () => { location.hash = '#/rehber'; });
+$('#viewGuide').addEventListener('click', () => {
+  // Çalardaki parti davulsa davul rehberi
+  guideInst = cur?.tracks[shown]?.kind === 'davul' ? 'davul' : cur?.tracks[shown]?.tab ? 'gitar' : null;
+  location.hash = '#/rehber';
+});
+$('#guideBack').addEventListener('click', () => {
+  if (lastView === 'rehber' && cameToGuideFrom) history.back();
+  else location.hash = '#/egzersiz';
 });
 
 // ---------------------------------------------------------------- çalışma geçmişi ekranı
@@ -1864,6 +1898,7 @@ let cameToExFrom = null; // egzersiz listesine nereden gelindi (geri düğmesi i
 let cameToMetroFrom = null;
 let cameToPlanFrom = null;
 let cameToHistFrom = null;
+let cameToGuideFrom = null;
 async function route() {
   const h = location.hash;
   let m;
@@ -1872,17 +1907,21 @@ async function route() {
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {
-    cameFromList = lastView === 'exlist' || lastView === 'plan';
+    cameFromList = ['exlist', 'plan', 'rehber'].includes(lastView);
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {
-    if (!['player', 'metro', 'plan', 'hist'].includes(lastView)) cameToExFrom = lastView;
+    if (!['player', 'metro', 'plan', 'hist', 'rehber'].includes(lastView)) cameToExFrom = lastView;
     lastView = 'exlist';
     await showExercises();
   } else if (/^#\/plan\/?$/.test(h)) {
     if (lastView !== 'player') cameToPlanFrom = lastView;
     lastView = 'plan';
     await showPlan();
+  } else if (/^#\/rehber\/?$/.test(h)) {
+    if (lastView !== 'player' || !cameToGuideFrom) cameToGuideFrom = ['exlist', 'player', 'lib'].includes(lastView) ? lastView : null;
+    lastView = 'rehber';
+    showGuide();
   } else if (/^#\/gecmis\/?$/.test(h)) {
     cameToHistFrom = lastView === 'exlist' || lastView === 'plan' ? lastView : null;
     lastView = 'hist';
