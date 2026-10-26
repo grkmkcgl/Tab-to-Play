@@ -613,7 +613,7 @@ test('dar ekran (360 px): yatay kaydırma yok, düğmeler ve paneller ekrana sı
   const fits = () => app.ev(() => {
     const w = innerWidth;
     const out = [...document.querySelectorAll('.ctl, .panel:not([hidden]) button, .panel:not([hidden]) input')]
-      .filter((e) => e.offsetParent)
+      .filter((e) => e.offsetParent && !e.closest('.scroll-x')) // yana kayan satırların içi taşma değil
       .filter((e) => { const r = e.getBoundingClientRect(); return r.left < -1 || r.right > w + 1; })
       .map((e) => e.id || e.textContent.trim() || e.className);
     return { scroll: document.documentElement.scrollWidth, w, out };
@@ -1057,6 +1057,36 @@ test('nota okuma rehberi: davul ve gitar, açıklamalar, notada gör ve dinle, �
   await app.close();
 }, { webkit: true });
 
+test('bölümler: dosyadaki bölümler listelenir, bölüme gidilir, bölüm döngüye alınır, çalarken bölüm adı görünür', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.addDemo();
+  eq(await app.text('#posSec'), 'Riff', 'başta ilk bölüm');
+  await app.panel('loop');
+  eq(await p.$$eval('#secList .sec-name', (els) => els.map((e) => e.textContent)), ['Riff · 1–4', 'Nakarat · 5–9'], 'bölüm listesi');
+  eq(await app.ev(() => document.querySelector('#secBox').getBoundingClientRect().height < 56), true, 'bölümler tek satır');
+  await app.click('[data-sec-go="1"]');
+  await p.waitForSelector('#p-loop', { state: 'hidden' });
+  eq([await app.text('#posBar'), await app.text('#posSec')], ['Ölçü 5/9', 'Nakarat'], 'bölüme gidildi');
+  near(await app.ev(() => ttpApi.tickPosition), (await app.barTicks(4, 4))[0], 'imleç bölüm başında');
+  await app.panel('loop');
+  await app.click('[data-sec-loop="0"]');
+  await app.toast(/Riff/);
+  eq(await app.text('#lblLoop'), '1–4', 'bölüm döngüde');
+  eq(await app.range(), await app.barTicks(0, 3), 'döngü aralığı bölüm');
+  await app.panel('loop');
+  eq(await p.$$eval('[data-sec-loop]', (els) => els.map((e) => e.getAttribute('aria-pressed'))), ['true', 'false'], 'döngüdeki bölüm işaretli');
+  // Döngü açıkken döngü dışındaki bölüme git: döngü o bölüme kayar
+  await app.click('[data-sec-go="1"]');
+  eq([await app.text('#lblLoop'), await app.text('#posBar')], ['5–9', 'Ölçü 5/9'], 'döngü bölümle kaydı');
+  // Bölümü olmayan nota (egzersiz): liste ve bölüm adı yok
+  await app.openEx('g-b1');
+  eq(await app.text('#posSec'), '', 'egzersizde bölüm adı yok');
+  await app.panel('loop');
+  assert(!(await p.isVisible('#secBox')), 'egzersizde bölüm listesi yok');
+  await app.close();
+}, { webkit: true });
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -1319,7 +1349,7 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   const fits = () => app.ev(() => {
     const w = innerWidth;
     const out = [...document.querySelectorAll('.view:not([hidden]) button, .view:not([hidden]) input, .panel:not([hidden]) button, .panel:not([hidden]) input')]
-      .filter((e) => e.offsetParent)
+      .filter((e) => e.offsetParent && !e.closest('.scroll-x')) // yana kayan satırların içi taşma değil
       .filter((e) => { const r = e.getBoundingClientRect(); return r.left < -1 || r.right > w + 1; })
       .map((e) => e.id || e.textContent.trim() || e.className);
     return { scroll: document.documentElement.scrollWidth, w, out };

@@ -330,6 +330,10 @@
 
     <div id="p-loop" class="panel" hidden role="dialog" aria-label="Döngü">
       <div class="panel-head"><h3>Döngü <small class="muted">(ölçü)</small></h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <div id="secBox" class="sec-box" hidden>
+        <span class="sec-h">Bölümler</span>
+        <ul id="secList" class="sec-list scroll-x"></ul>
+      </div>
       <label class="switch"><input type="checkbox" id="loopOn"><span>Seçili bölümü tekrar tekrar çal</span></label>
       <div class="loop-grid">
         <span>Başlangıç</span>
@@ -378,7 +382,7 @@
     </div>
 
     <div class="progress">
-      <span id="posBar" class="pos">Ölçü –</span>
+      <span class="pos-wrap"><span id="posBar" class="pos">Ölçü –</span><span id="posSec" class="pos sec"></span></span>
       <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Şarkıda konum">
       <span id="posTime" class="pos">0:00 / 0:00</span>
     </div>

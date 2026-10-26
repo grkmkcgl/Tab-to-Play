@@ -195,6 +195,21 @@ a { color: var(--accent); }
 .progress { display: flex; align-items: center; gap: 10px; padding: 2px 4px; }
 .progress input { flex: 1; min-width: 0; }
 .pos { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-wrap { display: flex; flex-direction: column; line-height: 1.2; }
+.pos.sec { font-size: 12px; color: var(--text); max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+.pos.sec:empty { display: none; }
+/* Şarkı bölümleri (döngü panelinde, tek satır, yana kayar) */
+.sec-box { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
+.sec-h { font-size: 13px; color: var(--muted); font-weight: 600; flex: none; }
+.sec-list { list-style: none; margin: 0; padding: 0 0 2px; display: flex; gap: 8px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: thin; }
+.sec-item { display: flex; flex: none; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.sec-item button { min-height: 40px; border: 0; background: var(--panel-2); padding: 4px 10px; white-space: nowrap; }
+.sec-item .sec-loop { display: flex; align-items: center; gap: 6px; }
+.sec-item .sec-loop .ic { width: 16px; height: 16px; }
+.sec-item .sec-loop small { color: var(--muted); }
+.sec-item .sec-go { border-left: 1px solid var(--line); font-weight: 600; }
+.sec-item .sec-loop[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.sec-item .sec-loop[aria-pressed="true"] small { color: inherit; }
 .buttons { display: flex; align-items: center; justify-content: space-around; gap: 2px; max-width: 720px; margin: 0 auto; }
 .ctl {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;

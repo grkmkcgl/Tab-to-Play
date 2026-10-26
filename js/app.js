@@ -509,6 +509,7 @@ function ensureApi() {
 
   api.scoreLoaded.on((sc) => {
     score = sc;
+    buildSections();
     buildMix();
     updateAll();
   });
@@ -712,7 +713,43 @@ function onPosition(e) {
 
 function updateBarLabel() {
   $('#posBar').textContent = score ? `Ölçü ${curBar + 1}/${score.masterBars.length}` : 'Ölçü –';
+  $('#posSec').textContent = (score && sectionAt(curBar)?.name) || '';
 }
+
+// ---------------------------------------------------------------- bölümler
+// Dosyadaki bölüm işaretleri (Intro, Nakarat…): döngü panelinde liste; bölüme git ya da bölümü
+// döngüye al. Ölçü yazısının altında o anki bölüm. Bir bölüm, sonraki bölümün başına kadar sürer.
+let sections = [];
+function buildSections() {
+  sections = [];
+  const bars = score?.masterBars || [];
+  bars.forEach((m, i) => {
+    if (m.section) sections.push({ name: (m.section.text || m.section.marker || '').trim() || `Bölüm ${sections.length + 1}`, from: i });
+  });
+  sections.forEach((s, k) => { s.to = (sections[k + 1]?.from ?? bars.length) - 1; });
+  $('#secBox').hidden = !sections.length;
+  // Tek satır, yana kayar (bölüm çok olsa da panel uzamaz): ⟳ ad · aralık = döngüye al, Git = oraya git
+  $('#secList').replaceChildren(...sections.map((s, k) => el('li', { class: 'sec-item' },
+    el('button', { class: 'sec-loop', type: 'button', 'data-sec-loop': k, 'aria-label': `${s.name} bölümünü döngüye al`, 'aria-pressed': 'false' },
+      icon('loop'), el('span', { class: 'sec-name' }, el('b', { text: s.name }), el('small', { text: ` · ${s.from + 1}–${s.to + 1}` }))),
+    el('button', { class: 'sec-go', type: 'button', 'data-sec-go': k, text: 'Git', 'aria-label': `${s.name} bölümüne git` }))));
+}
+const sectionAt = (bar) => sections.findLast((s) => s.from <= bar);
+$('#secList').addEventListener('click', (e) => {
+  const go = e.target.closest('[data-sec-go]')?.dataset.secGo;
+  const lp = e.target.closest('[data-sec-loop]')?.dataset.secLoop;
+  const s = sections[go ?? lp];
+  if (!s) return;
+  if (go != null) {
+    // Döngü açıksa ve bölüm döngünün dışındaysa döngü bölüme kayar (yoksa imleç başa döner)
+    if (cur.s.loop.on && (s.from < cur.s.loop.from || s.from > cur.s.loop.to)) setLoop({ from: s.from, to: s.to });
+    goBar(s.from);
+  } else {
+    setLoop({ from: s.from, to: s.to, on: true });
+    toast(`“${s.name}” döngüde (${s.from + 1}–${s.to + 1})`);
+  }
+  closePanels();
+});
 
 function goBar(i) {
   if (!score || !api?.tickCache) return;
@@ -1005,6 +1042,10 @@ function updateLoopUi() {
   $('#lfOut').textContent = L.from + 1;
   $('#ltOut').textContent = L.to + 1;
   $('#lblLoop').textContent = L.on ? `${L.from + 1}–${L.to + 1}` : 'Döngü';
+  $$('[data-sec-loop]').forEach((b) => {
+    const s = sections[b.dataset.secLoop];
+    b.setAttribute('aria-pressed', String(!!s && L.on && L.from === s.from && L.to === s.to));
+  });
   $('#loopTapHint').textContent = loopTapStart == null
     ? 'Notalarda önce başlangıç, sonra bitiş ölçüsüne dokun.'
     : `Başlangıç ${loopTapStart + 1}. ölçü seçildi. Şimdi bitiş ölçüsüne dokun.`;
@@ -1189,6 +1230,7 @@ $('#wake').addEventListener('change', (e) => {
 // ---------------------------------------------------------------- paneller ve kontroller
 function closePanels() {
   $$('.panel').forEach((p) => { p.hidden = true; });
+  $('#sheet').style.paddingBottom = '';
   if (loopTapStart != null) { loopTapStart = null; if (cur) updateLoopUi(); }
   $$('[data-panel]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
 }
@@ -1198,6 +1240,10 @@ function togglePanel(name) {
   closePanels();
   if (!open) return;
   p.hidden = false;
+  p.scrollTop = 0; // her açılışta baştan (bölüm listesi, açıklama üstte)
+  // Panel notaların altını örter: son ölçüler de panelin üstüne kaydırılabilsin (döngü panelinde
+  // notalara dokunarak seçiliyor)
+  $('#sheet').style.paddingBottom = `${Math.max(innerHeight * 0.4, p.getBoundingClientRect().height + 60)}px`;
   $$(`[data-panel="${name}"]`).forEach((b) => b.setAttribute('aria-expanded', 'true'));
 }
 $$('[data-panel]').forEach((b) => b.addEventListener('click', () => togglePanel(b.dataset.panel)));

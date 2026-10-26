@@ -7,6 +7,7 @@ Gitar tabı ve davul notası çalar. Guitar Pro ve MusicXML dosyalarını açar,
 - **Kendi partin otomatik açılır:** ilk açılışta "Hangi enstrümanı çalıyorsun?" diye sorar (Gitar / Bas / Davul / Diğer). Şarkıyı açınca o parti seçili gelir: gitarcıya tab, davulcuya davul notası.
 - **Hız:** %25–%150 arası, ses perdesi bozulmadan. Hazır değerler (%50, %75, %90, %100), orijinal ve o anki BPM.
 - **Döngü:** seçtiğin ölçüleri tekrar tekrar çalar. Döngü paneli açıkken notalarda önce başlangıç, sonra bitiş ölçüsüne dokunman yeterli. Ölçü numarasıyla ya da çalarken "İmleçten" ile de seçebilirsin, bilgisayarda fareyle sürüklemek de olur.
+- **Bölümler:** dosyada bölüm işaretleri varsa (Intro, Nakarat…) Döngü panelinde listelenir: bölüme tek dokunuşla git ya da bölümü döngüye al. Çalarken ölçü numarasının altında hangi bölümde olduğun yazar.
 - **Hız antrenörü:** döngüdeki bölümü (döngü yoksa bütün şarkıyı) her turda biraz hızlandırarak çalar, örneğin %60'tan %100'e 5'er 5'er.
 - **Partiler:** her parti için Sessiz, Solo ve ses düzeyi. "Kendi partimi sessize al" ile şarkının geri kalanına eşlik edersin.
 - **Metronom** ve başlamadan önce bir ölçü sayma.
