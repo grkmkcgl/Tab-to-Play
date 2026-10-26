@@ -38,6 +38,7 @@
   <symbol id="i-metro" viewBox="0 0 24 24"><path d="M9.2 3h5.6l4.4 18H4.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6.6 16h10.8M12 16l5-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-plan" viewBox="0 0 24 24"><path d="M5 3h14v18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8 8 1.5 1.5L12 7M8 14l1.5 1.5L12 13M14 8.5h2.5M14 14.5h2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-guide" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.5 4 12 5.5v14c-2.5-1.5-5.5-1.5-8 0zM20 5.5C17.5 4 14.5 4 12 5.5v14c2.5-1.5 5.5-1.5 8 0z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tuner" viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 16l4-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.8"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
 </svg>
@@ -109,6 +110,10 @@
     <button id="btnHist" class="metro-card" type="button">
       <svg class="ic"><use href="#i-chart"/></svg>
       <span><b>Çalışma geçmişi</b><small>Günlük süre, seri ve egzersizlerde tempo gelişimi.</small></span>
+    </button>
+    <button id="btnTuner" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-tuner"/></svg>
+      <span><b>Akort aleti</b><small>Gitar ve bas: mikrofonla teli dinler, pes mi tiz mi gösterir.</small></span>
     </button>
     <button id="btnMetro" class="metro-card" type="button">
       <svg class="ic"><use href="#i-metro"/></svg>
@@ -245,6 +250,29 @@
         <dt>Sapta çizgiler</dt><dd>tremolo: aynı notayı çok hızlı tekrarla</dd>
       </dl>
     </div>
+  </div>
+</section>
+
+<!-- Akort aleti -->
+<section id="tunerView" class="view" hidden>
+  <header class="topbar">
+    <button id="tBack" class="icon-btn" type="button" aria-label="Egzersizlere dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Akort aleti</h1>
+  </header>
+  <div class="tuner">
+    <div class="seg wide" id="segTuner" role="group" aria-label="Enstrüman">
+      <button type="button" data-v="gitar">🎸 Gitar</button><button type="button" data-v="bas">🎸 Bas</button>
+    </div>
+    <div class="t-note"><b id="tNote">–</b><span id="tNoteEn"></span></div>
+    <div class="t-meter off" aria-hidden="true">
+      <i class="t-zone"></i><i class="t-mid"></i><i id="tNeedle" class="t-needle"></i>
+      <span class="t-l">−50</span><span class="t-r">+50</span>
+    </div>
+    <p id="tState" class="t-state" aria-live="polite">Mikrofonu aç ve bir teli tek başına çal.</p>
+    <p id="tFreq" class="muted small t-freq"></p>
+    <ol id="tStrings" class="t-strings"></ol>
+    <button id="tStart" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Mikrofonu aç</span></button>
+    <p class="muted small">Standart akort, La = 440 Hz. Pes: ses düşük, teli sıkıştır. Tiz: ses yüksek, teli gevşet.</p>
   </div>
 </section>
 

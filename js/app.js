@@ -6,8 +6,9 @@ import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTe
 import { DURATIONS, PLANS, READY_SHARE, dailySteps, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 import { makeBackup, restoreBackup } from './yedek.js?v=__SURUM__';
+import { TUNINGS, Tuner, nearestString, noteFrom, noteName } from './akort.js?v=__SURUM__';
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -208,7 +209,7 @@ async function checkInbox() {
 }
 
 // ---------------------------------------------------------------- görünümler
-const VIEWS = ['libView', 'exView', 'planView', 'histView', 'guideView', 'metroView', 'playerView'];
+const VIEWS = ['libView', 'exView', 'planView', 'histView', 'guideView', 'tunerView', 'metroView', 'playerView'];
 // Başka bir görünüme geçerken çalanı durdur
 function showView(id) {
   if (id !== 'playerView') {
@@ -218,7 +219,8 @@ function showView(id) {
     if (trainer.on) stopTrainer(false);
   }
   if (id !== 'metroView') metro.stop();
-  if (id !== 'playerView' && id !== 'metroView') releaseWake();
+  if (id !== 'tunerView') stopTuner();
+  if (id !== 'playerView' && id !== 'metroView' && id !== 'tunerView') releaseWake();
   for (const v of VIEWS) $(`#${v}`).hidden = v !== id;
 }
 
@@ -1493,7 +1495,7 @@ function releaseWake() {
   wakeLock = null;
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && (playing || metro.running)) requestWake();
+  if (!document.hidden && (playing || metro.running || tuner.running)) requestWake();
 });
 
 // ---------------------------------------------------------------- çalışma süresi
@@ -1957,6 +1959,93 @@ function lineChart(box, sel, data, { ref, refLabel }) {
   sel.textContent = data.at(-1).cap;
 }
 
+// ---------------------------------------------------------------- akort aleti
+// Mikrofonla perde (js/akort.js). İbre sapmayı yumuşatarak gösterir; ses kesilince yarım saniye
+// sonra söner. ±5 sent akortlu sayılır.
+const tuner = new Tuner();
+window.ttpTuner = tuner; // testler için
+let tunerInst = null;
+let tunerShown = { cents: 0, at: 0 };
+function renderTunerStrings() {
+  $$('#segTuner button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === tunerInst)));
+  $('#tStrings').classList.toggle('bas', tunerInst === 'bas');
+  $('#tStrings').replaceChildren(...TUNINGS[tunerInst].map(([n, midi]) => {
+    const name = noteName(midi);
+    return el('li', { 'data-string': n }, el('b', { text: name.tr }), el('span', { text: `${n}. tel · ${name.en}` }));
+  }));
+  tuner.min = tunerInst === 'bas' ? 35 : 60;
+}
+function showTuner() {
+  showView('tunerView');
+  document.title = 'Akort aleti · Tab-to-Play';
+  tunerInst ||= prefs.instrument === 'bas' ? 'bas' : 'gitar';
+  renderTunerStrings();
+  updateTunerButton();
+}
+function updateTunerButton() {
+  $('use', $('#tStart')).setAttribute('href', tuner.running ? '#i-pause' : '#i-play');
+  $('#tStart span').textContent = tuner.running ? 'Durdur' : 'Mikrofonu aç';
+}
+function stopTuner() {
+  if (!tuner.running) return;
+  tuner.stop();
+  updateTunerButton();
+  releaseWake();
+  $('.t-meter').classList.add('off');
+}
+tuner.onPitch = (p) => {
+  const meter = $('.t-meter');
+  const now = performance.now();
+  if (!p) {
+    // Ses kesilince son gösterim yarım saniye kalsın, sonra sönsün
+    if (now - tunerShown.at > 500) {
+      meter.classList.add('off');
+      meter.classList.remove('ok');
+      $('#tState').classList.remove('ok');
+    }
+    return;
+  }
+  const n = noteFrom(p.freq);
+  tunerShown = { cents: tunerShown.at && now - tunerShown.at < 500 ? tunerShown.cents * 0.6 + n.cents * 0.4 : n.cents, at: now };
+  const c = Math.round(tunerShown.cents);
+  const ok = Math.abs(c) <= 5;
+  $('#tNote').textContent = n.tr;
+  $('#tNoteEn').textContent = n.en;
+  $('#tNeedle').style.left = `${50 + clamp(c, -50, 50)}%`;
+  meter.classList.remove('off');
+  meter.classList.toggle('ok', ok);
+  $('#tState').classList.toggle('ok', ok);
+  $('#tState').textContent = ok ? 'Akortlu ✓' : c < 0 ? `Pes (${c} sent) · teli sıkıştır` : `Tiz (+${c} sent) · teli gevşet`;
+  $('#tFreq').textContent = `${p.freq.toFixed(1)} Hz`;
+  const s = nearestString(tunerInst, p.freq);
+  $$('#tStrings li').forEach((li) => li.classList.toggle('on', Number(li.dataset.string) === s.n && s.d < 1.5));
+};
+$('#tStart').addEventListener('click', async () => {
+  if (tuner.running) { stopTuner(); return; }
+  try {
+    await tuner.start();
+    $('#tState').textContent = 'Bir teli tek başına çal.';
+    requestWake();
+  } catch (e) {
+    console.warn('Mikrofon açılamadı', e);
+    $('#tState').textContent = e.name === 'NotAllowedError'
+      ? 'Mikrofon izni verilmedi. Tarayıcı ayarlarından bu siteye mikrofon izni ver, sonra yeniden dene.'
+      : e.name === 'NotFoundError' ? 'Mikrofon bulunamadı.' : 'Mikrofon açılamadı.';
+  }
+  updateTunerButton();
+});
+$('#segTuner').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  tunerInst = v;
+  renderTunerStrings();
+});
+$('#btnTuner').addEventListener('click', () => { location.hash = '#/akort'; });
+$('#tBack').addEventListener('click', () => {
+  if (lastView === 'tuner' && cameToTunerFrom === 'exlist') history.back();
+  else location.hash = '#/egzersiz';
+});
+
 // ---------------------------------------------------------------- tek başına metronom
 const metro = new Metronome();
 window.ttpMetro = metro; // testler için
@@ -2193,6 +2282,7 @@ let cameToMetroFrom = null;
 let cameToPlanFrom = null;
 let cameToHistFrom = null;
 let cameToGuideFrom = null;
+let cameToTunerFrom = null;
 async function route() {
   const h = location.hash;
   let m;
@@ -2206,13 +2296,17 @@ async function route() {
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {
-    if (!['player', 'metro', 'plan', 'hist', 'rehber'].includes(lastView)) cameToExFrom = lastView;
+    if (!['player', 'metro', 'plan', 'hist', 'rehber', 'tuner'].includes(lastView)) cameToExFrom = lastView;
     lastView = 'exlist';
     await showExercises();
   } else if (/^#\/plan\/?$/.test(h)) {
     if (lastView !== 'player') cameToPlanFrom = lastView;
     lastView = 'plan';
     await showPlan();
+  } else if (/^#\/akort\/?$/.test(h)) {
+    cameToTunerFrom = lastView;
+    lastView = 'tuner';
+    showTuner();
   } else if (/^#\/rehber\/?$/.test(h)) {
     if (lastView !== 'player' || !cameToGuideFrom) cameToGuideFrom = ['exlist', 'player', 'lib'].includes(lastView) ? lastView : null;
     lastView = 'rehber';

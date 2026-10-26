@@ -1215,6 +1215,66 @@ test('çalma listeleri: oluştur, şarkı ekle, sırala, listede sonraki şarkı
   await app.close();
 }, { webkit: true });
 
+test('akort aleti (tarayıcısız): perde bulma saf ve harmonikli seste, bas tellerinde, nota ve sent', async () => {
+  const A = await import('../js/akort.js');
+  const sr = 24000;
+  // Gürültü: sabit tohumlu sözde rastgele (her koşuda aynı)
+  let seed = 1;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 * 2 - 1; };
+  const sig = (f, harm = [1], noise = 0) => Float32Array.from({ length: 2048 }, (_, i) =>
+    0.3 * harm.reduce((v, a, k) => v + a * Math.sin((2 * Math.PI * f * (k + 1) * i) / sr), 0) + noise * rnd());
+  const cents = (a, b) => 1200 * Math.log2(a / b);
+  // Gürültüsüz: 1 sentten iyi; ikinci harmoniği temelden güçlü olsa da temel bulunur
+  for (const [f, harm, min] of [[82.41, [1], 60], [82.41, [0.4, 1, 0.6, 0.3], 60], [110, [1, 0.8, 0.5, 0.3], 60], [329.63, [1, 0.3], 60], [41.2, [1, 0.7, 0.4], 35]]) {
+    const r = A.detectPitch(sig(f, harm), sr, { min });
+    assert(r && Math.abs(cents(r.freq, f)) < 1, `${f} Hz (${harm}): ${r && r.freq}`);
+  }
+  // Gürültülü (~15 dB): 5 sent içinde, oktav hatası yok (ekran ayrıca yumuşatır)
+  for (const [f, harm, min] of [[82.41, [1, 0.5], 60], [110, [1, 0.8, 0.5, 0.3], 60], [41.2, [1, 0.7, 0.4], 35]]) {
+    const r = A.detectPitch(sig(f, harm, 0.05), sr, { min });
+    assert(r && Math.abs(cents(r.freq, f)) < 5, `gürültülü ${f} Hz: ${r && r.freq}`);
+  }
+  eq(A.detectPitch(new Float32Array(2048), sr), null, 'sessizlikte perde yok');
+  eq(A.noteFrom(440), { midi: 69, cents: 0, tr: 'La', en: 'A4' }, 'La 440');
+  eq([A.noteFrom(445).cents, A.noteFrom(82.41).tr, A.noteFrom(82.41).en], [19.6, 'Mi', 'E2'], 'sent ve Mi');
+  eq([A.nearestString('gitar', 108).n, A.nearestString('bas', 41.5).n, A.TUNINGS.gitar.length, A.TUNINGS.bas.length], [5, 4, 6, 4], 'en yakın tel');
+}, { node: true });
+
+test('akort aleti: mikrofonla La (110 Hz) bulunur, 5. tel işaretlenir, akortlu; izin yoksa ne yapılacağı söylenir; ekrandan çıkınca mikrofon kapanır', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#btnTuner');
+  await p.waitForSelector('#tunerView:not([hidden])');
+  eq([await app.pressed('#segTuner'), await p.$$eval('#tStrings li', (els) => els.length)], [['gitar'], 6], 'gitar telleri');
+  await app.click('#tStart');
+  await p.waitForFunction(() => document.querySelector('#tNote').textContent === 'La', null, { timeout: 10000 });
+  eq(await app.text('#tNoteEn'), 'A2', 'La 2');
+  await p.waitForFunction(() => document.querySelector('#tStrings li.on')?.dataset.string === '5', null, { timeout: 5000 });
+  await p.waitForFunction(() => document.querySelector('#tState').textContent.includes('Akortlu'), null, { timeout: 5000 });
+  near(parseFloat(await app.text('#tFreq')), 110, 'frekans (Hz)', 1);
+  eq(await app.text('#tStart span'), 'Durdur', 'düğme durdur');
+  // Bas: dört tel
+  await app.click('#segTuner [data-v="bas"]');
+  eq(await p.$$eval('#tStrings li', (els) => els.length), 4, 'bas telleri');
+  // Ekrandan çıkınca mikrofon kapanır
+  await app.click('#tBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  eq(await app.ev(() => ttpTuner.running), false, 'mikrofon kapandı');
+  await app.close();
+  // İzin verilmezse ne yapılacağı söylenir
+  const app2 = await App.open(b, t);
+  await app2.page.addInitScript(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('izin yok', 'NotAllowedError')); });
+  await app2.page.reload();
+  await app2.ev(() => { location.hash = '#/akort'; });
+  await app2.page.waitForSelector('#tunerView:not([hidden])');
+  await app2.click('#tStart');
+  await app2.page.waitForFunction(() => document.querySelector('#tState').textContent.includes('izni'));
+  assert((await app2.text('#tState')).includes('mikrofon izni ver'), 'izin mesajı');
+  await app2.close();
+});
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -1504,6 +1564,9 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.ev(() => { location.hash = '#/rehber'; });
   await app.page.waitForSelector('#guideView:not([hidden])');
   ok(await fits(), 'nota okuma rehberi');
+  await app.ev(() => { location.hash = '#/akort'; });
+  await app.page.waitForSelector('#tunerView:not([hidden])');
+  ok(await fits(), 'akort aleti');
   await app.ev(() => { location.hash = '#/metronom'; });
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');
@@ -1632,7 +1695,13 @@ const server = await serve(PORT);
 // Tarayıcısız testler tarayıcı açmaz; yalnızca onlar seçildiyse tarayıcı hiç başlatılmaz
 const browser = chosen.every((t) => t.node) ? null
   : WEBKIT ? await webkit.launch()
-  : await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  : await chromium.launch({
+    args: [
+      '--autoplay-policy=no-user-gesture-required',
+      // Akort testi: mikrofon izni kendiliğinden, mikrofon yerine bir ses dosyası (La, 110 Hz)
+      '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${F('la-110.wav')}`,
+    ],
+  });
 let failed = 0;
 const started = Date.now();
 for (const t of chosen) {

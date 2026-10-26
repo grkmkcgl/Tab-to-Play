@@ -420,6 +420,29 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .plan-songs .btn { justify-content: flex-start; text-align: left; }
 .plan-next b { color: var(--text); }
 .plan-group h3 { font-size: 15px; margin: 14px 0 0; color: var(--muted); }
+/* Akort aleti */
+.tuner { max-width: 560px; margin: 0 auto; padding: 16px calc(16px + var(--safe-r)) calc(30px + var(--safe-b)) calc(16px + var(--safe-l)); display: flex; flex-direction: column; gap: 14px; }
+.t-note { display: flex; align-items: baseline; justify-content: center; gap: 10px; min-height: 76px; }
+.t-note b { font-size: 64px; font-weight: 750; line-height: 1; }
+.t-note span { color: var(--muted); font-size: 20px; font-weight: 600; }
+.t-meter { position: relative; height: 54px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); overflow: hidden; }
+.t-zone { position: absolute; top: 0; bottom: 0; left: 45%; width: 10%; background: color-mix(in srgb, #3fb950 22%, transparent); }
+.t-mid { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--muted); }
+.t-needle { position: absolute; top: 6px; bottom: 6px; left: 50%; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--text); transition: left .12s linear, background .12s; }
+.t-meter.ok .t-needle { background: #3fb950; }
+.t-meter.off .t-needle { opacity: .25; }
+.t-meter span { position: absolute; bottom: 2px; font-size: 11px; color: var(--muted); }
+.t-l { left: 6px; } .t-r { right: 6px; }
+.t-state { text-align: center; font-size: 18px; font-weight: 650; margin: 0; min-height: 1.4em; }
+.t-state.ok { color: #3fb950; }
+:root.acik .t-state.ok { color: #1a7f37; }
+:root.acik .t-meter.ok .t-needle { background: #1a7f37; }
+.t-freq { text-align: center; margin: -8px 0 0; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+.t-strings { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.t-strings.bas { grid-template-columns: repeat(4, 1fr); }
+.t-strings li { border: 1px solid var(--line); border-radius: 10px; padding: 6px 2px; text-align: center; display: flex; flex-direction: column; font-size: 13px; color: var(--muted); }
+.t-strings li b { color: var(--text); font-size: 16px; }
+.t-strings li.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
 /* Nota okuma rehberi */
 .guide-open { width: 100%; margin: 12px 0 4px; }
 .guide-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
