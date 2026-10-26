@@ -70,15 +70,19 @@ Hepsi kodda yorumla işaretli:
 
 ```bash
 npm install
-npm test                 # 31 senaryo, ~100 sn
+npm test                 # 32 senaryo, ~90 sn
 npm test -- partiler     # adında "partiler" geçenler
+npm run test:webkit      # `webkit: true` işaretli testler WebKit'te (Safari'nin motoru)
 VERBOSE=1 npm test       # hata yığınlarıyla
 ```
+
+- **Egzersizler tarayıcısız da denetlenir:** `egzersizler (tarayıcısız)` testi bütün egzersizleri Node'da alphaTab ile okur (yanlış davul adı ya da efekt hata verir), her ölçünün tam dolduğunu (nota sayısı), kimliklerin tekil olduğunu ve planlardaki kimliklerin o enstrümanın egzersizi olduğunu saniyenin altında denetler. Tarayıcıdaki egzersiz testi yalnızca her enstrüman/seviyeden ilk ve son egzersizi (ve birkaç özel egzersizi) çizer. Tarayıcısız testler `{ node: true }` ile işaretlidir, tarayıcı açmaz.
+- **WebKit:** CI'da ayrı iş (`webkit`), yayın bu iş de geçmeden yapılmaz. Hangi testlerin WebKit'te de koşacağı `{ webkit: true }` ile seçilir: açılış, örnek şarkının çalması, kütüphane, görünüm, egzersiz listesi ve örnekleri, plan, metronom, dar ekran. Service worker'lı (çevrimdışı, paylaş, güncelleme) ve Chromium'a özgü testler yalnızca Chromium'da. Yerelde: `npx playwright install webkit`, sonra `npm run test:webkit`.
 
 - Playwright kendi Chromium'unu ister (`npx playwright install chromium`). Bulut ortamında `/opt/pw-browsers` hazırsa kurulum gerekmez.
 - Her test temiz bir tarayıcı bağlamında (boş IndexedDB) çalışır. `App` yardımcısı tercihleri yazar, alphaTab'ın `changeTrackMute/Solo/Volume` çağrılarını `window.__calls`'a kaydeder, CSP ihlallerini ve uygulama dışı istekleri yakalar. Bunlardan biri olursa test kırmızı olur.
 - Kapsanan senaryolar: ilk açılış ve enstrüman sorusu; gitarcı/davulcu için doğru parti; GP + MusicXML + bozuk + tekrar eklenen dosya; Türkçe arama, favori, sıralama, silme onayı; Tab bul (Ultimate Guitar'ın kendi araması, diğerlerinin adresleri, yeni sekme, referrer yok, boşken kapalı, kütüphane aramasından şarkı adı); güncellemede sürüm tutarlılığı (eski dosyaları tutan CDN taklidiyle sayfa ve betik aynı sürüm, eski önbellek silinir, internetsiz açılış); paylaşım (indirme yedeği); hız sınırları ve BPM; metronom/sayma kalıcılığı; döngü (ölçü, imleçten, içeri/dışarı dokunma, iki dokunuşla seçme, kaldırma); döngünün gerçekten tekrar etmesi ve antrenörün hızlandırması; partiler (sessiz, solo, ses, parti değiştirme, yeniden açılışta uygulanma); görünüm ayarları; şarkıya özel ayarların kalıcılığı; geri düğmesi; klavye/pedal; 360 px ekranda taşma olmaması; çevrimdışı açılış ve çalma (egzersiz dahil); Android paylaş hedefi; CSP ağ kilidi; egzersiz listesi (yalnızca elektro gitar ve davul, seviye ve Ölçüler sekmesi, seçimin kalıcılığı, toplam 81); ölçü egzersizleri (gitarda ve davulda ölçü etiketleri, 5/8'de sekizlik tempo, ölçü değişimi, çalma); egzersizde BPM ile tempo (hazır tempolar, ±1/±5, sınırlar, vuruşla tempo), metronom/sayma varsayılan açık ve şarkılardan ayrı, metronom sesi, döngü, tempo işaretinin gizlenmesi, tempo saklanır ve listede görünür, sonra açılan şarkı etkilenmez; antrenörün BPM ile hedefe çıkması; 81 egzersizin hepsinin açılması, çizilmesi ve ölçülerinin tam olması, davul/triole/flam egzersizinin çalması; metronom ekranı (tempo, sınırlar, vuruşla tempo, ölçü/bölüm, triolede ara tıklar, vuruş ışıkları, boşluk tuşu, tercihlerin kalıcılığı, ekrandan çıkınca durma); çalışma planı (gitar ve davul, kimliklerin geçerliliği, öneri sırası, bugünkü çalışma, ✓, plana geri dönüş, davul adımları ve kuralları, aşamanın enstrümana göre kalıcılığı); siyah arka plan (ayarlar ve görünüm paneli, nota renkleri, kalıcılık); çift dokunmanın yakınlaştırmaması; 360 px'te egzersiz ve plan ekranları.
-- Kapsanmayanlar (elle denenmeli): gerçek iPhone/iPad/Android'de ses, ana ekrana ekleme, paylaş menüsü; Safari/WebKit; metronomun ekran kapalıyken ya da uygulama arka plandayken düzenli çalması (tarayıcı zamanlayıcıları seyrekleştirir).
+- Kapsanmayanlar (elle denenmeli): gerçek iPhone/iPad/Android'de ses, ana ekrana ekleme, paylaş menüsü; Safari'nin kendisi (WebKit testleri motoru dener, iOS'taki ses ve depolama kısıtlarını değil); metronomun ekran kapalıyken ya da uygulama arka plandayken düzenli çalması (tarayıcı zamanlayıcıları seyrekleştirir).
 
 ## Sürüm yükseltme
 

@@ -1,8 +1,9 @@
 // Uçtan uca testler: gerçek index.html'i başsız Chromium'da açar.
 //   npm test                 → hepsi
 //   npm test -- döngü        → adında "döngü" geçenler
+//   npm run test:webkit      → `webkit: true` işaretli testler WebKit'te (Safari'nin motoru)
 //   VERBOSE=1 npm test       → hata ayrıntıları
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,7 +16,9 @@ fixtures.make();
 const F = (name) => join(fixtures.OUT, name);
 const PORT = Number(process.env.PORT) || 8199;
 const BASE = `http://localhost:${PORT}/`;
-const filter = process.argv.slice(2).join(' ').toLocaleLowerCase('tr');
+const args = process.argv.slice(2);
+const WEBKIT = args.includes('--webkit');
+const filter = args.filter((a) => a !== '--webkit').join(' ').toLocaleLowerCase('tr');
 
 const tests = [];
 const test = (name, fn, opts = {}) => tests.push({ name, fn, ...opts });
@@ -207,7 +210,7 @@ test('ilk açılış: enstrüman sorusu, boş kütüphane yardımı', async (b, 
   await p.waitForSelector('#libView:not([hidden])');
   assert(!(await p.evaluate(() => document.querySelector('#instDlg').open)), 'ikinci açılışta tekrar soruldu');
   await app.close();
-});
+}, { webkit: true });
 
 test('örnek şarkı: gitarist gitar tabını görür, çalar ve duraklatır', async (b, t) => {
   const app = await App.open(b, t, { inst: 'gitar' });
@@ -223,7 +226,7 @@ test('örnek şarkı: gitarist gitar tabını görür, çalar ve duraklatır', a
   await app.click('#btnPlay');
   await app.page.waitForFunction(() => ttpApi.playerState === 0);
   await app.close();
-});
+}, { webkit: true });
 
 test('örnek şarkı: davulcu davul notasını görür, tab seçenekleri kapalı', async (b, t) => {
   const app = await App.open(b, t, { inst: 'davul' });
@@ -235,7 +238,7 @@ test('örnek şarkı: davulcu davul notasını görür, tab seçenekleri kapalı
   assert(await app.page.isVisible('#staveNote'), 'davul açıklaması yok');
   assert(await app.ev(() => [...document.querySelectorAll('#segStave button')].every((x) => x.disabled)), 'tab/nota düğmeleri kapalı olmalı');
   await app.close();
-});
+}, { webkit: true });
 
 test('dosya ekleme: Guitar Pro, MusicXML, bozuk dosya ve aynı dosya', async (b, t) => {
   const app = await App.open(b, t, { inst: 'gitar' });
@@ -299,7 +302,7 @@ test('kütüphane: Türkçe arama, favori, sıralama, silme onayı', async (b, t
   eq(await app.page.inputValue('#sort'), 'title', 'sıralama tercihi kalıcı');
   assert(await app.page.isVisible('#songList .song:has-text("XML Deneme") .fav[aria-pressed="true"]'), 'favori kalıcı');
   await app.close();
-});
+}, { webkit: true });
 
 test('tab bul: Ultimate Guitar kendi aramasında, diğerleri yeni sekmede; yalnızca şarkı/sanatçı adı', async (b, t) => {
   const app = await App.open(b, t, { viewport: { width: 360, height: 740 } });
@@ -535,7 +538,7 @@ test('görünüm: tab / nota / ikisi, tek satır, boyut, otomatik kaydırma', as
   const prefs = await app.ev(() => JSON.parse(localStorage.getItem('ttp-prefs')));
   eq([prefs.stave, prefs.layout, prefs.follow], ['ikisi', 'yatay', false], 'tercihler kaydedildi');
   await app.close();
-});
+}, { webkit: true });
 
 test('şarkıya özel ayarlar yeniden açınca geri gelir (hız, döngü, sessiz parti)', async (b, t) => {
   const app = await App.open(b, t);
@@ -612,7 +615,7 @@ test('dar ekran (360 px): yatay kaydırma yok, düğmeler ve paneller ekrana sı
     await app.closePanels();
   }
   await app.close();
-});
+}, { webkit: true });
 
 test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve davul, seçim hatırlanır', async (b, t) => {
   const app = await App.open(b, t, { inst: 'davul' });
@@ -652,7 +655,7 @@ test('egzersiz: liste enstrümana ve seviyeye göre, yalnızca elektro gitar ve 
   await app.click('#exBack');
   await p.waitForSelector('#libView:not([hidden])');
   await app.close();
-});
+}, { webkit: true });
 
 test('egzersiz: ölçüler sekmesi (4/4, 5/8, 7/8…), ölçü etiketi, x/8 ölçüde BPM = sekizlik tık, ölçü değişimi', async (b, t) => {
   const app = await App.open(b, t);
@@ -841,7 +844,7 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   await p.waitForSelector('#planView:not([hidden]) #planToday [data-id^="g-"]');
   eq(await app.pressed('#segStage'), ['1'], 'gitar aşaması ayrı kaldı');
   await app.close();
-});
+}, { webkit: true });
 
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
@@ -941,7 +944,34 @@ test('egzersiz: antrenör tempoyu turda bir artırır ve hedefte durur', async (
   await app.close();
 });
 
-test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul, triole ve flam egzersizi çalar', async (b, t) => {
+// Tarayıcısız: bütün egzersizler alphaTex olarak okunur (yanlış davul adı ya da efekt hata verir),
+// ölçüleri tam dolar (yanlış nota sayısı), kimlikler tekil, planlardaki kimlikler o enstrümanın
+// egzersizi. Tarayıcıdaki egzersiz testi yalnızca her seviyeden birkaç örneği çizer.
+test('egzersizler (tarayıcısız): hepsi okunur, ölçüler tam, kimlikler tekil, planlar geçerli', async () => {
+  const at = await import('@coderline/alphatab');
+  const E = await import('../js/egzersiz.js');
+  const P = await import('../js/plan.js');
+  const ids = E.EXERCISES.map((e) => e.id);
+  eq(ids.filter((x, i) => ids.indexOf(x) !== i), [], 'tekrarlanan kimlik');
+  const bad = [];
+  for (const ex of E.EXERCISES) {
+    try {
+      const imp = new at.importer.AlphaTexImporter();
+      imp.initFromString(E.exerciseTex(ex), new at.Settings());
+      const sc = imp.readScore();
+      const short = sc.tracks[0].staves[0].bars
+        .map((bar, i) => [i + 1, bar.voices[0].beats.reduce((a, x) => a + x.playbackDuration, 0), bar.masterBar.calculateDuration()])
+        .filter(([, got, want]) => got !== want);
+      if (sc.tracks.length !== 1 || sc.masterBars.length < 2 || short.length) bad.push(`${ex.id}: ${JSON.stringify(short)}`);
+    } catch (e) { bad.push(`${ex.id}: ${e.message}`); }
+  }
+  eq(bad, [], 'okunamayan ya da ölçüsü eksik egzersiz');
+  const wrong = Object.entries(P.PLANS).flatMap(([inst, plan]) => plan.stages
+    .flatMap((st) => P.stageIds(plan, st)).filter((id) => E.findExercise(id)?.inst !== inst));
+  eq(wrong, [], 'plandaki egzersizler');
+}, { node: true });
+
+test('egzersiz: listede hepsi var; her seviyeden örnek açılır, çizilir; gitar tab, davul nota; davul, triole ve flam egzersizi çalar', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   await app.click('#btnEx');
@@ -955,7 +985,15 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul, triole 
     }
   }
   eq(ids.length, 81, 'egzersiz sayısı');
-  for (const id of ids) {
+  // Her enstrüman/seviyeden ilk ve son egzersiz, ayrıca ölçü değişimi ve flam
+  const sample = new Set(['g-i2', 'd-t14', 'd-o10']);
+  for (const inst of ['g-', 'd-']) {
+    for (const lv of ['b', 'o', 'i', 't']) {
+      const of = ids.filter((id) => id.startsWith(inst + lv));
+      sample.add(of[0]).add(of.at(-1));
+    }
+  }
+  for (const id of sample) {
     await app.openEx(id);
     const info = await app.ev(() => ({
       svg: document.querySelectorAll('#sheet svg').length,
@@ -964,12 +1002,8 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul, triole 
       profile: ttpApi.settings.display.staveProfile,
       looping: ttpApi.isLooping,
       chip: document.querySelector('#btnTrack').textContent,
-      // Ölçüsü eksik ya da taşan nota dizisi (egzersiz yazarken yanlış nota sayısı)
-      short: ttpApi.score.tracks[0].staves[0].bars
-        .map((bar, i) => [i + 1, bar.voices[0].beats.reduce((a, x) => a + x.playbackDuration, 0), bar.masterBar.calculateDuration()])
-        .filter(([, got, want]) => got !== want),
     }));
-    assert(info.svg > 0 && info.bars >= 2 && info.tracks === 1 && info.looping && !info.short.length, `${id}: ${JSON.stringify(info)}`);
+    assert(info.svg > 0 && info.bars >= 2 && info.tracks === 1 && info.looping, `${id}: ${JSON.stringify(info)}`);
     if (id.startsWith('g-')) assert(info.profile === 3 && info.chip.includes('Elektro gitar'), `${id} gitar tabı: ${JSON.stringify(info)}`);
     else assert(info.profile === 0 && info.chip.includes('Davul'), `${id} davul notası: ${JSON.stringify(info)}`);
   }
@@ -982,7 +1016,7 @@ test('egzersiz: hepsi açılır, çizilir; gitar tab, davul nota; davul, triole 
     await p.waitForFunction(() => ttpApi.playerState === 0);
   }
   await app.close();
-});
+}, { webkit: true });
 
 test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, çalar ve durur, tercihler kalıcı', async (b, t) => {
   const app = await App.open(b, t);
@@ -1035,7 +1069,7 @@ test('metronom: tempo, vuruşla ayarlama, ölçü ve bölüm, çalar ve durur, t
   await p.waitForSelector('#exView:not([hidden])');
   eq(await app.ev(() => ttpMetro.running), false, 'ekrandan çıkınca durdu');
   await app.close();
-});
+}, { webkit: true });
 
 test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar', async (b, t) => {
   const app = await App.open(b, t, { viewport: { width: 360, height: 740 } });
@@ -1067,7 +1101,7 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.page.waitForSelector('#metroView:not([hidden])');
   ok(await fits(), 'metronom');
   await app.close();
-});
+}, { webkit: true });
 
 test('güncelleme: CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümden gelir', async (b, t) => {
   const site1 = join(fixtures.OUT, 'site-1');
@@ -1177,9 +1211,12 @@ test('ağ kilidi: başka adrese istek CSP ile engellenir', async (b, t) => {
 }, { allowCsp: true });
 
 // ======================================================================= çalıştırıcı
+const chosen = tests.filter((t) => (WEBKIT ? t.webkit : true) && (!filter || t.name.toLocaleLowerCase('tr').includes(filter)));
 const server = await serve(PORT);
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
-const chosen = tests.filter((t) => !filter || t.name.toLocaleLowerCase('tr').includes(filter));
+// Tarayıcısız testler tarayıcı açmaz; yalnızca onlar seçildiyse tarayıcı hiç başlatılmaz
+const browser = chosen.every((t) => t.node) ? null
+  : WEBKIT ? await webkit.launch()
+  : await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 let failed = 0;
 const started = Date.now();
 for (const t of chosen) {
@@ -1192,7 +1229,7 @@ for (const t of chosen) {
     console.log(`✗ ${t.name}\n    ${(process.env.VERBOSE ? e.stack : e.message).split('\n').join('\n    ')}`);
   }
 }
-await browser.close();
+await browser?.close();
 server.close();
 console.log(`\n${chosen.length - failed}/${chosen.length} test geçti (${((Date.now() - started) / 1000).toFixed(0)} sn)`);
 process.exit(failed ? 1 : 0);

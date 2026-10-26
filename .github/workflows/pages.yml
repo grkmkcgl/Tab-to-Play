@@ -37,12 +37,26 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm test
 
+  # Safari'nin motoru (WebKit) ile de testler geçmeden yayınlanmaz
+  webkit:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps webkit
+      - run: npm run test:webkit
+
   deploy:
-    needs: test
+    needs: [test, webkit]
     # Önizleme dalının testleri geçtiyse (workflow_run) main'in testlerini yeniden çalıştırmadan yayınla
     if: >-
       always() && (
-        (github.event_name != 'workflow_run' && needs.test.result == 'success') ||
+        (github.event_name != 'workflow_run' && needs.test.result == 'success' && needs.webkit.result == 'success') ||
         (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
          github.event.workflow_run.head_branch == 'ccr-04f3bc7b-mmi4nj')
       )
