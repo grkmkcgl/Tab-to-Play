@@ -536,6 +536,7 @@ function ensureApi() {
   });
   api.playbackRangeChanged.on((e) => onRangeChanged(e.playbackRange));
   api.beatMouseDown.on((beat) => {
+    seekTo = null; // notaya dokunuş bekleyen ok tuşu atamasından yeni
     lastTap = { tick: api.tickCache?.getBeatStart(beat) ?? null, bar: beat.voice.bar.index, at: Date.now() };
   });
   api.beatMouseUp.on(onBeatTap);
@@ -690,10 +691,18 @@ function togglePlay() {
   else play();
 }
 
+// Ok tuşu ya da pedal art arda basılınca önceki atamanın konum olayı sonradan gelebiliyor (yavaş
+// cihazda) ve ölçüyü geri çekiyordu; bir sonraki basış da yanlış ölçüden devam edip kayboluyordu.
+// En son istenen konum gelene kadar (en çok 1,5 sn) başka atama olayları ölçüyü değiştirmez.
+let seekTo = null; // { tick, at }
 function onPosition(e) {
   endTime = e.endTime;
   if (!seeking) $('#seek').value = e.endTime ? Math.round((e.currentTime / e.endTime) * 1000) : 0;
   $('#posTime').textContent = `${fmtTime(e.currentTime)} / ${fmtTime(e.endTime)}`;
+  if (e.isSeek && seekTo && performance.now() - seekTo.at < 1500) {
+    if (Math.abs(e.currentTick - seekTo.tick) > 10) return; // eski atama
+    seekTo = null;
+  }
   if (e.isSeek && api?.tickCache && score) {
     const r = api.tickCache.findBeat(new Set([shown]), e.currentTick);
     if (r?.beat) { curBar = r.beat.voice.bar.index; updateBarLabel(); }
@@ -707,7 +716,9 @@ function updateBarLabel() {
 function goBar(i) {
   if (!score || !api?.tickCache) return;
   const idx = clamp(i, 0, score.masterBars.length - 1);
-  api.tickPosition = api.tickCache.getMasterBarStart(score.masterBars[idx]);
+  const tick = api.tickCache.getMasterBarStart(score.masterBars[idx]);
+  api.tickPosition = tick;
+  seekTo = { tick, at: performance.now() };
   curBar = idx;
   updateBarLabel();
 }
@@ -1203,7 +1214,10 @@ function updateAll() {
 $('#btnPlay').addEventListener('click', togglePlay);
 $('#btnStart').addEventListener('click', () => {
   if (!api) return;
-  if (cur?.s.loop.on && api.playbackRange) api.tickPosition = api.playbackRange.startTick;
+  if (cur?.s.loop.on && api.playbackRange) {
+    api.tickPosition = api.playbackRange.startTick;
+    seekTo = { tick: api.playbackRange.startTick, at: performance.now() };
+  }
   else { stop(); curBar = 0; updateBarLabel(); }
 });
 // Listeden açıldıysa geri düğmesi tarayıcı geçmişini kullanır (Android geri tuşuyla aynı davranır).
@@ -1220,6 +1234,7 @@ seek.addEventListener('input', () => {
   if (endTime) $('#posTime').textContent = `${fmtTime((seek.value / 1000) * endTime)} / ${fmtTime(endTime)}`;
 });
 seek.addEventListener('change', () => {
+  seekTo = null;
   if (api && endTime) api.timePosition = (seek.value / 1000) * endTime;
   seeking = false;
 });

@@ -581,7 +581,7 @@ test('geri düğmesi kütüphaneye döner ve çalmayı durdurur', async (b, t) =
   await app.close();
 });
 
-test('klavye ve pedal: boşluk / PageDown çalar-durdurur, Home başa sarar', async (b, t) => {
+test('klavye ve pedal: boşluk / PageDown çalar-durdurur, Home başa sarar, art arda basışlar kaybolmaz', async (b, t) => {
   const app = await App.open(b, t);
   await app.addDemo();
   await app.page.keyboard.press(' ');
@@ -590,6 +590,17 @@ test('klavye ve pedal: boşluk / PageDown çalar-durdurur, Home başa sarar', as
   await app.page.waitForFunction(() => ttpApi.playerState === 0);
   await app.page.keyboard.press('ArrowRight');
   eq(await app.text('#posBar'), 'Ölçü 2/9', 'sonraki ölçü');
+  // Yavaş cihazda önceki basışın konum olayı sonradan gelir: ölçüyü geri çekmemeli, sonraki basış
+  // doğru ölçüden devam etmeli (olay burada elle, geç gelmiş gibi tetikleniyor)
+  await app.page.keyboard.press('ArrowRight');
+  await app.page.keyboard.press('ArrowRight');
+  await app.ev(() => {
+    const tick = ttpApi.tickCache.getMasterBarStart(ttpApi.score.masterBars[2]);
+    ttpApi.playerPositionChanged.trigger({ currentTime: 0, endTime: 1, currentTick: tick, endTick: 1, isSeek: true });
+  });
+  eq(await app.text('#posBar'), 'Ölçü 4/9', 'geç gelen eski konum ölçüyü geri çekmez');
+  await app.page.keyboard.press('ArrowRight');
+  eq(await app.text('#posBar'), 'Ölçü 5/9', 'sonraki basış kaybolmaz');
   await app.page.keyboard.press('Home');
   await app.page.waitForFunction(() => ttpApi.tickPosition <= 5);
   eq(await app.text('#posBar'), 'Ölçü 1/9', 'başa sarıldı');
