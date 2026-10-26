@@ -40,6 +40,8 @@ self.addEventListener('activate', (e) => {
       if (k.startsWith('ttp-') && k.endsWith(SCOPE) && k !== APP_CACHE && k !== LIB_CACHE) await caches.delete(k);
     }
     await self.clients.claim();
+    // Açık sayfalar bu sürümü öğrensin; eski sürümdeki sayfa "Yeni sürüm hazır" der
+    for (const c of await self.clients.matchAll({ type: 'window' })) c.postMessage({ type: 'surum', build: BUILD });
   })());
 });
 

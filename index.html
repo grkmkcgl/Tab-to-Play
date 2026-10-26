@@ -91,7 +91,7 @@
     </div>
     <button id="btnPlan" class="metro-card plan-card" type="button">
       <svg class="ic"><use href="#i-plan"/></svg>
-      <span><b>Çalışma planı</b><small id="planCardSub">Her gün ne çalışacağını adım adım gösterir.</small></span>
+      <span><b>Çalışma planı</b><small>Her gün ne çalışacağını adım adım gösterir.</small></span>
     </button>
     <button id="btnMetro" class="metro-card" type="button">
       <svg class="ic"><use href="#i-metro"/></svg>
@@ -317,6 +317,11 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="updateBar" class="update-bar" role="status" hidden>
+  <span>Yeni sürüm hazır.</span>
+  <button id="btnReload" class="btn primary" type="button">Yenile</button>
+  <button id="updateClose" class="icon-btn" type="button" aria-label="Sonra"><svg class="ic"><use href="#i-close"/></svg></button>
+</div>
 <div id="dropHint" class="drop-hint" hidden>Dosyaları bırak, kütüphaneye ekleyeyim</div>
 
 <script src="lib/alphaTab.min.js"></script>

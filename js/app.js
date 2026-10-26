@@ -1284,7 +1284,10 @@ function exRow(x, { plan = false } = {}) {
   if (plan) {
     const t = exTarget(x);
     meta.append(el('span', { class: last >= t ? 'last' : '', text: last >= t ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
-    if (openedToday(rec?.opened)) main.querySelector('.ex-title').append(el('span', { class: 'done', text: ' ✓', 'aria-label': 'bugün çalışıldı' }));
+    // ✓ ekran okuyucuda "onay işareti" diye okunmasın: görünmez metinle anlatılır
+    if (openedToday(rec?.opened)) {
+      main.querySelector('.ex-title').append(el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }), el('span', { class: 'sr-only', text: ' (bugün çalışıldı)' }));
+    }
   }
   return el('li', { class: 'ex-item' }, main);
 }
@@ -1544,9 +1547,19 @@ addEventListener('hashchange', route);
 // iPhone'da sessiz moddayken de ses gelsin (iOS 17+)
 try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* yok */ }
 
+// Yeni sürüm: service worker yeni sürümü kurup devralınca açık sayfalara kendi sürümünü bildirir
+// (sw.js). Sayfa eski sürümdeyse yenilemesi söylenir; çalarken sayfayı kendiliğinden yenilemeyiz.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker kaydedilemedi', e));
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Ana ekrandaki uygulama günlerce açık kalabiliyor: öne gelince yeni sürüm var mı diye bak
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch((e) => console.warn('Service worker kaydedilemedi', e));
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'surum' && e.data.build !== BUILD) $('#updateBar').hidden = false;
+  });
 }
+$('#btnReload').addEventListener('click', () => location.reload());
+$('#updateClose').addEventListener('click', () => { $('#updateBar').hidden = true; });
 
 (async function start() {
   if (new URLSearchParams(location.search).has('gelen')) history.replaceState(null, '', location.pathname + location.hash);

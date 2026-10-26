@@ -340,6 +340,8 @@ test('tab bul: Ultimate Guitar kendi aramasında, diğerleri yeni sekmede; yaln�
   // Dokununca yeni sekmede sitenin kendi arama sayfası açılır (dış site burada taklit edilir)
   await app.ctx.route('https://www.ultimate-guitar.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'ok' }));
   const [popup] = await Promise.all([app.ctx.waitForEvent('page'), app.click('#findList a[data-site="ug"]')]);
+  // Yeni sekme önce boş açılıp sonra yönlenebilir (tarayıcı sürümüne göre): adresin gelmesini bekle
+  await popup.waitForURL(/ultimate-guitar\.com/, { timeout: 5000 }).catch(() => {});
   eq(popup.url(), ug('Akşam Şarkısı'), 'açılan sekme');
   await popup.close();
   app.external = app.external.filter((u) => !u.startsWith('https://www.ultimate-guitar.com/'));
@@ -1103,7 +1105,7 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.close();
 }, { webkit: true });
 
-test('güncelleme: CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümden gelir', async (b, t) => {
+test('güncelleme: açık sayfa yeni sürümü bildirir; CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümden gelir', async (b, t) => {
   const site1 = join(fixtures.OUT, 'site-1');
   const site2 = join(fixtures.OUT, 'site-2');
   build(site1, 'surum-1');
@@ -1119,11 +1121,17 @@ test('güncelleme: CDN eski dosyaları tutsa da sayfa ve betikler aynı sürümd
     await p.reload();
     await p.waitForFunction(() => !!navigator.serviceWorker.controller);
     eq(await versions(), ['surum-1', 'surum-1'], 'ilk sürüm');
-    // Yeni sürüm yayınlandı; CDN ilk sürümün dosyalarını hâlâ tutuyor
+    assert(!(await p.isVisible('#updateBar')), 'aynı sürümde bildirim yok');
+    // Yeni sürüm yayınlandı; CDN ilk sürümün dosyalarını hâlâ tutuyor. Açık sayfa eski sürümde:
+    // yeni service worker devralınca "Yeni sürüm hazır" der, Yenile ile yeni sürüme geçilir
     srv.opts.root = site2;
-    await p.reload();
+    await p.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+    await p.waitForSelector('#updateBar:not([hidden])', { timeout: 15000 });
+    await Promise.all([p.waitForEvent('load'), app.click('#btnReload')]);
     await p.waitForSelector('#libView:not([hidden])');
     eq(await versions(), ['surum-2', 'surum-2'], 'sayfa ve betik aynı sürüm olmalı');
+    await p.waitForTimeout(300);
+    assert(!(await p.isVisible('#updateBar')), 'yeni sürümde bildirim yok');
     await app.click('#btnFind');
     assert(await p.evaluate(() => document.querySelector('#findDlg').open), 'Tab bul düğmesi çalışmalı');
     // Yeni service worker devraldıktan sonra yalnızca güncel önbellekler kalır; internetsiz de aynı sürüm açılır
