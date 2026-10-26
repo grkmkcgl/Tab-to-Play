@@ -95,6 +95,19 @@ const DRUMS = {
 
 export const PLANS = { gitar: GUITAR, davul: DRUMS };
 
+// Günlük süre: adımların dakikası ve kaç egzersiz (sırayla ısınma, teknik, akor/ritim, ölçü), şarkı
+export const DURATIONS = {
+  15: { steps: [[3, 1], [5, 1], [3, 1], [2, 1]], song: 2 },
+  30: { steps: [[5, 1], [10, 2], [5, 1], [5, 1]], song: 5 },
+  45: { steps: [[5, 1], [15, 3], [10, 2], [5, 1]], song: 10 },
+};
+export const dailySteps = (plan, minutes) => {
+  const d = DURATIONS[minutes] || DURATIONS[30];
+  return plan.steps.map((s, i) => ({ ...s, min: d.steps[i][0], n: d.steps[i][1] }));
+};
+// Aşamadaki egzersizlerin bu kadarında hedef tempoya ulaşılınca sonraki aşama önerilir
+export const READY_SHARE = 0.75;
+
 const sameDay = (a, b) => {
   const x = new Date(a);
   const y = new Date(b);

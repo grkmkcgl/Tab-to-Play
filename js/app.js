@@ -3,7 +3,7 @@
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
-import { PLANS, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
+import { DURATIONS, PLANS, READY_SHARE, dailySteps, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 import { makeBackup, restoreBackup } from './yedek.js?v=__SURUM__';
 
@@ -43,6 +43,7 @@ function loadPrefs() {
     // Çalışma planı: seçili aşama (0–2), enstrümana göre (gitarınki eski adıyla)
     planStage: 0,
     planStageDavul: 0,
+    planMin: 30, // günlük süre (15 | 30 | 45 dk)
     // Tema: acik | koyu | gece (nota alanı da koyu). Boşsa eski "siyah arka plan" (dark) tercihinden.
     theme: null,
     dark: false,
@@ -1478,7 +1479,15 @@ async function showPlan() {
   renderPlan();
   await practiceQueue;
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
+  try { songs = await db.allSongs(); } catch { /* öneri olmadan da plan çalışır */ }
   renderPlan();
+}
+
+// Şarkı adımı için öneri: o enstrümanın partisi olan, en uzun süredir açılmayan şarkılar
+function planSongs(inst, n = 2) {
+  return songs.filter((s) => s.tracks?.some((t) => t.kind === inst))
+    .sort((a, b) => (a.opened || 0) - (b.opened || 0))
+    .slice(0, n);
 }
 
 function renderPlan() {
@@ -1490,14 +1499,28 @@ function renderPlan() {
   const ids = stageIds(plan, st);
   const reached = ids.filter((id) => (exProgress.get(id)?.best || 0) >= exTarget(findExercise(id))).length;
   $('#planWhen').textContent = `${st.when} · Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}`;
+  // Aşamanın çoğunda hedefe ulaşıldıysa sonraki aşamayı öner
+  const ready = k < plan.stages.length - 1 && reached >= ids.length * READY_SHARE;
+  $('#planReady').hidden = !ready;
+  if (ready) {
+    $('#planReady').replaceChildren(
+      el('span', { text: `Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}. Sonraki aşamaya geçmeye hazırsın.` }),
+      el('button', { class: 'btn primary', type: 'button', 'data-stage': k + 1, text: `${k + 2}. aşamaya geç: ${plan.stages[k + 1].title}` }));
+  }
 
+  const minutes = DURATIONS[prefs.planMin] ? Number(prefs.planMin) : 30;
+  $$('#segPlanMin button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === minutes)));
+  $('#planMinLbl').textContent = `(~${minutes} dk)`;
   let n = 0;
-  const steps = plan.steps.map((step) => el('li', { class: 'plan-step' },
+  const steps = dailySteps(plan, minutes).map((step) => el('li', { class: 'plan-step' },
     el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. ${step.title}` }), el('span', { class: 'muted', text: ` · ${step.min} dk` })),
     el('ul', { class: 'ex-list' }, ...pick(st[step.key], step.n, exProgress).map((id) => exRow(findExercise(id), { plan: true })))));
+  const suggest = planSongs(inst);
   steps.push(el('li', { class: 'plan-step' },
-    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. Şarkı` }), el('span', { class: 'muted', text: ' · 5+ dk' })),
+    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. Şarkı` }), el('span', { class: 'muted', text: ` · ${DURATIONS[minutes].song}+ dk` })),
     el('p', { class: 'muted small', text: 'Bugün çalıştığın tekniği kütüphanendeki bir şarkıda dene. Zor bölümü döngüye al, hızı düşür, aynı kurallarla yavaş yavaş artır.' }),
+    suggest.length ? el('div', { class: 'plan-songs' }, ...suggest.map((s) => el('button', { class: 'btn', type: 'button', 'data-song': s.id },
+      el('span', { text: `▶ ${s.title}` }), s.artist ? el('small', { class: 'muted', text: ` · ${s.artist}` }) : null))) : null,
     el('button', { class: 'btn', type: 'button', 'data-go': 'lib', text: 'Kütüphaneye git' })));
   $('#planToday').replaceChildren(...steps);
 
@@ -1522,8 +1545,25 @@ $('#segStage').addEventListener('click', (e) => {
   savePrefs();
   renderPlan();
 });
+$('#segPlanMin').addEventListener('click', (e) => {
+  const v = Number(e.target.closest('button')?.dataset.v);
+  if (!DURATIONS[v]) return;
+  prefs.planMin = v;
+  savePrefs();
+  renderPlan();
+});
 $('#planView').addEventListener('click', (e) => {
   if (e.target.closest('[data-go="lib"]')) { location.hash = '#/'; return; }
+  const song = e.target.closest('[data-song]')?.dataset.song;
+  if (song) { location.hash = `#/sarki/${song}`; return; }
+  const stage = e.target.closest('[data-stage]')?.dataset.stage;
+  if (stage != null) {
+    prefs[stageKey(exInst())] = Number(stage);
+    savePrefs();
+    renderPlan();
+    $('#planView').scrollIntoView?.({ block: 'start' });
+    return;
+  }
   const id = e.target.closest('[data-id]')?.dataset.id;
   if (id) location.hash = `#/egzersiz/${id}`;
 });
@@ -1989,7 +2029,7 @@ async function route() {
   const h = location.hash;
   let m;
   if ((m = h.match(/^#\/sarki\/([\w-]+)/))) {
-    cameFromList = lastView === 'lib';
+    cameFromList = lastView === 'lib' || lastView === 'plan'; // plandaki şarkı önerisinden de geri dönülür
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {

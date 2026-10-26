@@ -394,6 +394,11 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
 .plan-rules summary { font-weight: 650; cursor: pointer; min-height: 28px; }
 .plan-rules ul { margin: 8px 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .plan-next { font-size: 14px; color: var(--muted); }
+.plan-ready { border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.plan-ready[hidden] { display: none; }
+.plan-min { margin: 10px 0 0; }
+.plan-songs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.plan-songs .btn { justify-content: flex-start; text-align: left; }
 .plan-next b { color: var(--text); }
 .plan-group h3 { font-size: 15px; margin: 14px 0 0; color: var(--muted); }
 /* Nota okuma rehberi */

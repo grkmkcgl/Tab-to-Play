@@ -1087,6 +1087,53 @@ test('bölümler: dosyadaki bölümler listelenir, bölüme gidilir, bölüm dö
   await app.close();
 }, { webkit: true });
 
+test('esnek plan: günlük süre 15/30/45 dk, aşamaya hazır olunca öneri, şarkı adımında kütüphaneden şarkı', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.addDemo();
+  await app.click('#btnBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.click('#btnEx');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  await app.click('#btnPlan');
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  const counts = () => p.$$eval('#planToday > li', (els) => els.map((li) => li.querySelectorAll('[data-id]').length));
+  eq([await app.pressed('#segPlanMin'), await counts()], [['30'], [1, 2, 1, 1, 0]], '30 dk');
+  await app.click('#segPlanMin [data-v="15"]');
+  eq([await counts(), await app.text('#planMinLbl')], [[1, 1, 1, 1, 0], '(~15 dk)'], '15 dk');
+  await app.click('#segPlanMin [data-v="45"]');
+  eq([await counts(), await app.text('#planMinLbl')], [[1, 3, 2, 1, 0], '(~45 dk)'], '45 dk');
+  assert((await app.text('#planToday > li:nth-child(2)')).includes('15 dk'), 'teknik 15 dk');
+  // Şarkı adımı: gitar partisi olan şarkı önerilir, dokununca açılır, geri dönünce plana dönülür
+  assert((await app.text('#planToday [data-song]')).includes('Deneme Riffi'), 'şarkı önerisi');
+  await app.click('#planToday [data-song]');
+  await app.ready();
+  eq(await app.text('#pTitle'), 'Deneme Riffi', 'öneriden şarkı açıldı');
+  await app.click('#btnBack');
+  await p.waitForSelector('#planView:not([hidden])');
+  // Aşamaya hazır: aşamadaki egzersizlerin çoğunda hedef tempoya ulaşıldı
+  assert(!(await p.isVisible('#planReady')), 'başta öneri yok');
+  await app.ev(async () => {
+    const { db } = await import('./js/db.js?v=__SURUM__');
+    const { PLANS, stageIds } = await import('./js/plan.js?v=__SURUM__');
+    const { findExercise } = await import('./js/egzersiz.js?v=__SURUM__');
+    const ids = stageIds(PLANS.gitar, PLANS.gitar.stages[0]);
+    for (const id of ids.slice(0, Math.ceil(ids.length * 0.75))) {
+      const x = findExercise(id);
+      await db.putEx({ id, s: { speed: x.max }, best: x.max, played: Date.now() });
+    }
+  });
+  await p.reload();
+  await p.waitForSelector('#planView:not([hidden]) #planReady:not([hidden])');
+  assert((await app.text('#planReady')).includes('hazırsın'), 'aşama önerisi');
+  await app.click('#planReady [data-stage]');
+  eq(await app.pressed('#segStage'), ['1'], 'sonraki aşamaya geçildi');
+  assert(!(await p.isVisible('#planReady')), 'yeni aşamada öneri yok');
+  eq(await app.pressed('#segPlanMin'), ['45'], 'süre kalıcı');
+  await app.close();
+}, { webkit: true });
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;

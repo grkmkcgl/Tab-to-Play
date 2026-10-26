@@ -123,7 +123,13 @@
       <button type="button" data-v="0">1. Temeller</button><button type="button" data-v="1">2. Orta</button><button type="button" data-v="2">3. İleri</button>
     </div>
     <p class="muted small" id="planWhen"></p>
-    <h2 class="plan-h">Bugünkü çalışma <small class="muted">(~30 dk)</small></h2>
+    <div id="planReady" class="plan-ready" hidden></div>
+    <div class="field plan-min"><span>Günlük süre</span>
+      <div class="seg" id="segPlanMin" role="group" aria-label="Günlük süre">
+        <button type="button" data-v="15">15 dk</button><button type="button" data-v="30">30 dk</button><button type="button" data-v="45">45 dk</button>
+      </div>
+    </div>
+    <h2 class="plan-h">Bugünkü çalışma <small class="muted" id="planMinLbl">(~30 dk)</small></h2>
     <ol id="planToday" class="plan-today"></ol>
     <p class="muted small">Her gün en uzun süredir çalışmadığın egzersizler gelir. Çalıştıkların gün boyunca ✓ ile kalır.</p>
     <details class="plan-rules">
