@@ -722,36 +722,40 @@ test('çift dokunma yakınlaştırmaz, iki parmakla yakınlaştırma açık', as
   await app.close();
 });
 
-test('siyah arka plan: ayarlardan ve görünüm panelinden açılır, nota açık renk çizilir, kalıcıdır', async (b, t) => {
+test('tema: açık / koyu / gece, ayarlardan ve görünüm panelinden; gecede nota yumuşak renkte; kalıcı; eski siyah tercihi gece olur', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   const state = () => app.ev(() => ({
-    cls: document.documentElement.classList.contains('siyah'),
+    cls: ['gece', 'acik'].filter((c) => document.documentElement.classList.contains(c)),
     bg: getComputedStyle(document.body).backgroundColor,
-    pref: JSON.parse(localStorage.getItem('ttp-prefs')).dark ?? false,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+    pref: JSON.parse(localStorage.getItem('ttp-prefs')).theme ?? null,
   }));
-  eq((await state()).cls, false, 'varsayılan kapalı');
+  eq((await state()).cls, [], 'varsayılan koyu');
   await app.click('#btnSettings');
-  await app.click('label:has(#darkSet)');
-  eq(await state(), { cls: true, bg: 'rgb(0, 0, 0)', pref: true }, 'ayarlardan açıldı');
+  eq(await app.pressed('#segTheme'), ['koyu'], 'ayarlarda koyu seçili');
+  await app.click('#segTheme [data-v="gece"]');
+  eq(await state(), { cls: ['gece'], bg: 'rgb(28, 24, 20)', scheme: 'dark', pref: 'gece' }, 'gece: zemin koyu ama siyah değil');
   await app.ev(() => document.querySelector('#settingsDlg').close());
   await app.addDemo();
   const glyph = () => app.ev(() => { const c = ttpApi.settings.display.resources.mainGlyphColor; return [c.r, c.g, c.b]; });
-  eq(await glyph(), [236, 236, 236], 'nota açık renk');
-  eq(await app.ev(() => getComputedStyle(document.querySelector('#sheetWrap')).backgroundColor), 'rgb(0, 0, 0)', 'nota zemini siyah');
+  eq(await glyph(), [228, 221, 211], 'gecede nota kırık beyaz');
+  eq(await app.ev(() => getComputedStyle(document.querySelector('#sheetWrap')).backgroundColor), 'rgb(36, 32, 28)', 'nota zemini yumuşak koyu');
   await app.panel('view');
-  assert(await p.isChecked('#darkSheet'), 'panelde de açık görünür');
-  await app.click('label:has(#darkSheet)');
+  eq(await app.pressed('#segThemeView'), ['gece'], 'panelde de gece');
+  await app.click('#segThemeView [data-v="acik"]');
   await p.waitForFunction(() => document.querySelectorAll('#sheet svg').length > 0);
-  eq(await glyph(), [0, 0, 0], 'kapatınca siyah nota');
-  eq((await state()).cls, false, 'kapandı');
-  await app.click('label:has(#darkSheet)');
+  eq(await glyph(), [0, 0, 0], 'açıkta alphaTab renkleri');
+  eq(await state(), { cls: ['acik'], bg: 'rgb(247, 242, 235)', scheme: 'light', pref: 'acik' }, 'açık tema');
   await p.reload();
   await app.ready();
-  eq((await state()).cls, true, 'kalıcı');
-  eq(await glyph(), [236, 236, 236], 'yeniden açılışta açık renk nota');
+  eq((await state()).cls, ['acik'], 'kalıcı');
   await app.close();
-});
+  // Önizlemedeki eski "siyah arka plan" tercihi gece olarak gelir
+  const app2 = await App.open(b, t, { prefs: { dark: true } });
+  eq((await app2.ev(() => [...document.documentElement.classList])).includes('gece'), true, 'eski tercih');
+  await app2.close();
+}, { webkit: true });
 
 test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sırası, ✓, geri dönüş, aşama enstrümana göre hatırlanır', async (b, t) => {
   const app = await App.open(b, t);

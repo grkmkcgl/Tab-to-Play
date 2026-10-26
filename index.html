@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="theme-color" content="#17130f">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#1c1814">
+<meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -276,7 +276,11 @@
       <div class="field"><span>Boyut</span>
         <div class="stepper"><button type="button" class="btn" data-zoom="-0.1" aria-label="Küçült">−</button><output id="zoomOut">%100</output><button type="button" class="btn" data-zoom="0.1" aria-label="Büyüt">+</button></div>
       </div>
-      <label class="switch"><input type="checkbox" id="darkSheet" data-dark><span>Siyah arka plan</span></label>
+      <div class="field"><span>Tema</span>
+        <div class="seg" id="segThemeView" data-theme-seg role="group" aria-label="Tema">
+          <button type="button" data-v="acik">Açık</button><button type="button" data-v="koyu">Koyu</button><button type="button" data-v="gece">Gece</button>
+        </div>
+      </div>
       <label class="switch"><input type="checkbox" id="follow"><span>Çalarken notaları otomatik kaydır</span></label>
       <label class="switch"><input type="checkbox" id="wake"><span>Çalarken ekranı açık tut</span></label>
     </div>
@@ -334,7 +338,12 @@
       <button type="button" data-v="gitar">Gitar</button><button type="button" data-v="bas">Bas</button><button type="button" data-v="davul">Davul</button><button type="button" data-v="diger">Diğer</button>
     </div>
   </div>
-  <label class="switch"><input type="checkbox" id="darkSet" data-dark><span>Siyah arka plan <small class="muted">(notalar siyah zemin üstünde açık renk)</small></span></label>
+  <div class="field"><span>Tema</span>
+    <div class="seg" id="segTheme" data-theme-seg role="group" aria-label="Tema">
+      <button type="button" data-v="acik">Açık</button><button type="button" data-v="koyu">Koyu</button><button type="button" data-v="gece">Gece</button>
+    </div>
+  </div>
+  <p class="muted small">Gece: nota alanı da koyu; notalar yumuşak açık renkte, gözü yormaz.</p>
   <h3>Şarkı nasıl eklenir?</h3>
   <ul class="help">
     <li>Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml) dosyaları açılır. Kütüphanedeki <b>Tab bul</b> şarkıyı tab sitelerinde arar.</li>

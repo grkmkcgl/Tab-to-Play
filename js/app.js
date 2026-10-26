@@ -43,7 +43,8 @@ function loadPrefs() {
     // Çalışma planı: seçili aşama (0–2), enstrümana göre (gitarınki eski adıyla)
     planStage: 0,
     planStageDavul: 0,
-    // Siyah arka plan (uygulama ve nota)
+    // Tema: acik | koyu | gece (nota alanı da koyu). Boşsa eski "siyah arka plan" (dark) tercihinden.
+    theme: null,
     dark: false,
     // Son yedeğin alındığı an (Ayarlar'da hatırlatmak için)
     lastBackup: 0,
@@ -440,20 +441,26 @@ function staveFor(info) {
   return { tab: at.StaveProfile.Tab, nota: at.StaveProfile.Score, ikisi: at.StaveProfile.ScoreTab }[prefs.stave] ?? at.StaveProfile.Tab;
 }
 
-// Siyah arka planda nota renkleri; kapalıyken alphaTab'ın kendi renkleri
+// Tema. Gecede nota da koyu zeminde: alphaTab notayı CSS ile değil kendi renkleriyle çizer, renkler
+// burada (saf beyaz değil, kırık beyaz; çizgiler yumuşak). Açık ve koyu temada nota kağıdı açık,
+// alphaTab'ın kendi renkleri.
+const THEME_BAR = { acik: '#f7f2eb', koyu: '#1c1814', gece: '#1c1814' };
+if (!THEME_BAR[prefs.theme]) prefs.theme = prefs.dark ? 'gece' : 'koyu';
 const SHEET_LIGHT = new at.Settings().display.resources;
-const SHEET_DARK = {
-  staffLineColor: [105, 105, 105], barSeparatorColor: [150, 150, 150], barNumberColor: [255, 140, 90],
-  mainGlyphColor: [236, 236, 236], secondaryGlyphColor: [150, 150, 150], scoreInfoColor: [236, 236, 236],
+const SHEET_GECE = {
+  staffLineColor: [119, 111, 102], barSeparatorColor: [149, 140, 130], barNumberColor: [242, 154, 107],
+  mainGlyphColor: [228, 221, 211], secondaryGlyphColor: [163, 154, 144], scoreInfoColor: [228, 221, 211],
 };
 function applySheetColors(res) {
-  for (const [k, rgb] of Object.entries(SHEET_DARK)) res[k] = prefs.dark ? new at.model.Color(...rgb, 255) : SHEET_LIGHT[k];
+  for (const [k, rgb] of Object.entries(SHEET_GECE)) res[k] = prefs.theme === 'gece' ? new at.model.Color(...rgb, 255) : SHEET_LIGHT[k];
 }
 
 function applyTheme() {
-  document.documentElement.classList.toggle('siyah', !!prefs.dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', prefs.dark ? '#000000' : '#17130f');
-  $$('[data-dark]').forEach((c) => { c.checked = !!prefs.dark; });
+  const root = document.documentElement;
+  root.classList.toggle('gece', prefs.theme === 'gece');
+  root.classList.toggle('acik', prefs.theme === 'acik');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BAR[prefs.theme]);
+  $$('[data-theme-seg] button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === prefs.theme)));
 }
 applyTheme();
 
@@ -1147,8 +1154,11 @@ $('#p-view').addEventListener('click', (e) => {
   updateViewUi();
   rerender();
 });
-$$('[data-dark]').forEach((c) => c.addEventListener('change', (e) => {
-  prefs.dark = e.target.checked;
+$$('[data-theme-seg]').forEach((seg) => seg.addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.theme = v;
+  prefs.dark = v === 'gece'; // aynı adresteki eski sürüm (önizleme) de koyu notayı göstersin
   savePrefs();
   applyTheme();
   rerender();
