@@ -5,6 +5,7 @@ import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
 import { PLANS, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
+import { makeBackup, restoreBackup } from './yedek.js?v=__SURUM__';
 
 const VERSION = '0.6.0';
 const BUILD = '__SURUM__';
@@ -44,6 +45,8 @@ function loadPrefs() {
     planStageDavul: 0,
     // Siyah arka plan (uygulama ve nota)
     dark: false,
+    // Son yedeğin alındığı an (Ayarlar'da hatırlatmak için)
+    lastBackup: 0,
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -1738,6 +1741,7 @@ function updateInstSeg() {
 $('#btnSettings').addEventListener('click', async () => {
   updateInstSeg();
   $('#ver').textContent = `v${VERSION} (${BUILD})`;
+  $('#backupInfo').textContent = backupInfo();
   const info = $('#storageInfo');
   info.textContent = `${songs.length} şarkı`;
   try {
@@ -1765,6 +1769,68 @@ $('#instGrid').addEventListener('click', (e) => {
   savePrefs();
   $('#instDlg').close();
   renderList();
+});
+
+// ---------------------------------------------------------------- yedekleme ve taşıma
+// Bütün veriler tek dosyada (js/yedek.js). Geri yüklenince sayfa yenilenir: tercihler, listeler ve
+// açık ekranlar yedekten gelenle baştan kurulsun.
+function backupInfo() {
+  const t = prefs.lastBackup;
+  if (!t) return 'Henüz yedek alınmadı.';
+  const days = Math.floor((Date.now() - t) / 864e5);
+  return `Son yedek: ${days === 0 ? 'bugün' : days === 1 ? 'dün' : `${days} gün önce`}.`;
+}
+$('#btnBackup').addEventListener('click', async () => {
+  const btn = $('#btnBackup');
+  btn.disabled = true;
+  try {
+    const data = await makeBackup(prefs, VERSION);
+    const name = `tab-to-play-yedek-${dayKey()}.json`;
+    const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
+    // Telefonda paylaşım menüsü (Dosyalara kaydet, AirDrop…), olmazsa indirme
+    let shared = false;
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Tab-to-Play yedeği' }); shared = true; } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    if (!shared) {
+      const a = el('a', { href: URL.createObjectURL(file), download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+    prefs.lastBackup = Date.now();
+    savePrefs();
+    $('#backupInfo').textContent = backupInfo();
+    toast(`Yedek hazır: ${data.songs.length} şarkı`);
+  } catch (e) {
+    console.warn('Yedek alınamadı', e);
+    toast('Yedek alınamadı', 4000);
+  } finally {
+    btn.disabled = false;
+  }
+});
+$('#backupIn').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (data?.app !== 'tab-to-play') { toast('Bu dosya bir Tab-to-Play yedeği değil', 4000); return; }
+  if (!confirm(`Yedekteki ${data.songs.length} şarkı, ilerleme ve geçmiş bu cihazdakilerle birleştirilecek; ayarlar yedektekiyle değişecek. Devam edilsin mi?`)) return;
+  try {
+    const n = await restoreBackup(data);
+    if (data.prefs) Object.assign(prefs, data.prefs, { lastBackup: prefs.lastBackup });
+    savePrefs();
+    sessionStorage.setItem('ttp-geri-yuklendi', `Yedek yüklendi: ${n.songs} yeni şarkı, ${n.exercises} egzersiz, ${n.days} gün`);
+  } catch (err) {
+    console.warn('Yedek yüklenemedi', err);
+    toast(err.message === 'yeni sürüm yedeği' ? 'Bu yedek daha yeni bir sürümden; önce uygulamayı güncelle' : 'Yedek yüklenemedi', 4000);
+    return;
+  }
+  location.reload();
 });
 
 // ---------------------------------------------------------------- yönlendirme
@@ -1826,6 +1892,9 @@ $('#updateClose').addEventListener('click', () => { $('#updateBar').hidden = tru
 
 (async function start() {
   if (new URLSearchParams(location.search).has('gelen')) history.replaceState(null, '', location.pathname + location.hash);
+  // Yedekten geri yüklendikten sonraki yenileme: ne yüklendiğini söyle
+  const restored = sessionStorage.getItem('ttp-geri-yuklendi');
+  if (restored) { sessionStorage.removeItem('ttp-geri-yuklendi'); setTimeout(() => toast(restored, 4000), 300); }
   await route();
   await checkInbox();
   if (!prefs.instrument) $('#instDlg').showModal();

@@ -927,6 +927,72 @@ test('çalışma geçmişi: gerçek çalma süresi, son tempo yalnız çalının
   await app.close();
 }, { webkit: true });
 
+test('yedekleme: hepsi tek dosyaya iner, başka cihazda geri yüklenir, ikinci yükleme ikilemez', async (b, t) => {
+  const path = join(fixtures.OUT, 'yedek.json');
+  const app = await App.open(b, t, { prefs: { sort: 'title' } });
+  const p = app.page;
+  await app.addDemo();
+  await app.ev(() => ttpPractice(60));
+  await app.click('#btnBack');
+  await p.waitForSelector('#libView:not([hidden]) #songList .song');
+  await app.click('#songList [data-act="fav"]');
+  await app.openEx('g-b2');
+  await app.ev(() => ttpPractice(30));
+  await app.ev(() => { location.hash = '#/'; });
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.click('#btnSettings');
+  eq(await app.text('#backupInfo'), 'Henüz yedek alınmadı.', 'yedek yok');
+  const [dl] = await Promise.all([p.waitForEvent('download'), app.click('#btnBackup')]);
+  assert(/^tab-to-play-yedek-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()), `dosya adı: ${dl.suggestedFilename()}`);
+  await dl.saveAs(path);
+  const data = JSON.parse(readFileSync(path, 'utf8'));
+  eq([data.app, data.format, data.songs.length, data.songs[0].fav, data.songs[0].title], ['tab-to-play', 1, 1, true, 'Deneme Riffi'], 'yedekteki şarkı');
+  eq(Buffer.from(data.songs[0].file64, 'base64').equals(readFileSync('ornek.gp')), true, 'şarkı dosyası aynen');
+  assert(data.exercises.some((e) => e.id === 'g-b2' && e.played && e.done) && data.days.length === 1 && data.prefs.sort === 'title', 'ilerleme, geçmiş, tercihler');
+  eq(await app.text('#backupInfo'), 'Son yedek: bugün.', 'son yedek');
+  await app.close();
+
+  // Yeni cihaz: boş kütüphane, başka tercihler
+  const app2 = await App.open(b, t, { inst: 'davul' });
+  const p2 = app2.page;
+  app2.onDialog = (d) => d.accept();
+  const restore = async () => {
+    await app2.click('#btnSettings');
+    await Promise.all([p2.waitForEvent('load'), p2.setInputFiles('#backupIn', path)]);
+    await p2.waitForSelector('#libView:not([hidden]) #songList .song');
+  };
+  await restore();
+  assert((await app2.toast(/Yedek yüklendi/)).includes('1 yeni şarkı'), 'ne yüklendiği söylenir');
+  eq(await app2.ev(() => { const x = JSON.parse(localStorage.getItem('ttp-prefs')); return [x.sort, x.instrument]; }), ['title', 'gitar'], 'tercihler yedekten');
+  eq(await p2.$$eval('#songList .song', (els) => els.length), 1, 'şarkı geldi');
+  assert(await p2.isVisible('#songList [data-act="fav"][aria-pressed="true"]'), 'favori');
+  await app2.click('#songList .song-main');
+  await app2.ready();
+  eq(await app2.text('#pTitle'), 'Deneme Riffi', 'şarkı açılır');
+  await app2.ev(() => { location.hash = '#/egzersiz'; });
+  await p2.waitForSelector('#exView:not([hidden])');
+  await app2.click('#segExInst [data-v="gitar"]');
+  await app2.click('#segExLevel [data-v="baslangic"]');
+  await p2.waitForFunction(() => document.querySelector('#exList [data-id="g-b2"]')?.textContent.includes('Son: 60 BPM'));
+  const daySec = () => app2.ev(async () => {
+    const { db } = await import('./js/db.js?v=__SURUM__');
+    return (await db.allDays()).map((d) => Math.round(d.sec));
+  });
+  eq(await daySec(), [90], 'geçmiş geldi');
+  // Aynı yedek ikinci kez: hiçbir şey ikilenmez
+  await app2.ev(() => { location.hash = '#/'; });
+  await p2.waitForSelector('#libView:not([hidden])');
+  await restore();
+  assert((await app2.toast(/Yedek yüklendi/)).includes('0 yeni şarkı'), 'ikinci yükleme');
+  eq(await p2.$$eval('#songList .song', (els) => els.length), 1, 'şarkı ikilenmedi');
+  eq(await daySec(), [90], 'süre ikiye katlanmadı');
+  // Yedek olmayan dosya
+  await app2.click('#btnSettings');
+  await p2.setInputFiles('#backupIn', F('test-sarki.gp'));
+  await app2.toast(/yedeği değil/);
+  await app2.close();
+});
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -1249,7 +1315,7 @@ test('çevrimdışı: uygulama, şarkı ve ses internet olmadan açılır', asyn
     for (const n of await caches.keys()) for (const r of await (await caches.open(n)).keys()) keys.push(new URL(r.url).pathname);
     return keys;
   });
-  for (const f of ['/', '/js/app.js', '/js/egzersiz.js', '/js/metronom.js', '/js/plan.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
+  for (const f of ['/', '/js/app.js', '/js/egzersiz.js', '/js/metronom.js', '/js/plan.js', '/js/yedek.js', '/lib/alphaTab.min.js', '/lib/soundfont/sonivox.sf3', '/lib/font/Bravura.woff2', '/ornek.gp']) {
     assert(cached.includes(f), `önbellekte yok: ${f}`);
   }
   await app.ctx.setOffline(true);

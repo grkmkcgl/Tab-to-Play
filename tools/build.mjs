@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const PUBLISH = ['index.html', 'sw.js', 'manifest.webmanifest', 'ornek.gp', 'css', 'js', 'lib', 'icons'];
-const STAMPED = ['index.html', 'sw.js', 'js/app.js', 'js/db.js', 'js/egzersiz.js', 'js/metronom.js', 'js/plan.js'];
+const STAMPED = ['index.html', 'sw.js', 'js/app.js', 'js/db.js', 'js/egzersiz.js', 'js/metronom.js', 'js/plan.js', 'js/yedek.js'];
 
 function defaultBuild() {
   let sha = 'yerel';

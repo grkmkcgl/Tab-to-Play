@@ -344,6 +344,14 @@
     <li>Bir şarkıyı başka birine göndermek için kütüphanede şarkının yanındaki <b>⋮ → Paylaş</b>.</li>
   </ul>
   <button id="btnDemo2" class="btn" type="button">Örnek şarkıyı ekle</button>
+  <h3>Yedekleme ve taşıma</h3>
+  <p class="muted small">Şarkılar, ayarlar, egzersiz ilerlemesi, çalışma geçmişi ve listeler tek bir dosyada. Başka cihaza geçerken ya da tarayıcı verilerini silmeden önce yedeği indir; yeni cihazda <b>Yedekten geri yükle</b> ile aç. Geri yükleme bu cihazdakilerle birleştirir.</p>
+  <div class="btn-row">
+    <button id="btnBackup" class="btn" type="button">Yedeği indir</button>
+    <label class="btn" for="backupIn">Yedekten geri yükle</label>
+    <input id="backupIn" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p id="backupInfo" class="muted small"></p>
   <h3>Depolama</h3>
   <p id="storageInfo" class="muted small"></p>
   <h3>Hakkında</h3>

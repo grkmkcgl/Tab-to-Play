@@ -277,6 +277,7 @@ input[type="range"] { accent-color: var(--accent); height: 28px; }
   background: #f3ece4; color: #17130f; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.4);
   animation: fadeIn .15s ease-out;
 }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Yeni sürüm hazır */
 .update-bar {
   position: fixed; left: 50%; top: calc(8px + env(safe-area-inset-top)); z-index: 35; transform: translateX(-50%);

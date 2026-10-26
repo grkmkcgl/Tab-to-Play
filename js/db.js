@@ -147,4 +147,27 @@ export const db = {
     const d = await openDataDb();
     return result(d.transaction('gunler').objectStore('gunler').getAll());
   },
+  async putDay(rec) {
+    const d = await openDataDb();
+    const tx = d.transaction('gunler', 'readwrite');
+    tx.objectStore('gunler').put(rec);
+    return done(tx);
+  },
+  // Çalma listeleri: { id, name, songs: [şarkı kimlikleri, sırayla], updated }
+  async allLists() {
+    const d = await openDataDb();
+    return result(d.transaction('listeler').objectStore('listeler').getAll());
+  },
+  async putList(rec) {
+    const d = await openDataDb();
+    const tx = d.transaction('listeler', 'readwrite');
+    tx.objectStore('listeler').put(rec);
+    return done(tx);
+  },
+  async deleteList(id) {
+    const d = await openDataDb();
+    const tx = d.transaction('listeler', 'readwrite');
+    tx.objectStore('listeler').delete(id);
+    return done(tx);
+  },
 };
