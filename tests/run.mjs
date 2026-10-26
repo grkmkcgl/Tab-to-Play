@@ -1158,13 +1158,14 @@ test('egzersiz: antrenör tempoyu turda bir artırır ve hedefte durur', async (
 // Tarayıcısız: bütün egzersizler alphaTex olarak okunur (yanlış davul adı ya da efekt hata verir),
 // ölçüleri tam dolar (yanlış nota sayısı), kimlikler tekil, planlardaki kimlikler o enstrümanın
 // egzersizi. Tarayıcıdaki egzersiz testi yalnızca her seviyeden birkaç örneği çizer.
-test('egzersizler (tarayıcısız): hepsi okunur, ölçüler tam, kimlikler tekil, planlar geçerli', async () => {
+test('egzersizler (tarayıcısız): hepsi okunur, ölçüler tam, kimlikler tekil, davulda tomlarda el sırası, planlar geçerli', async () => {
   const at = await import('@coderline/alphatab');
   const E = await import('../js/egzersiz.js');
   const P = await import('../js/plan.js');
   const ids = E.EXERCISES.map((e) => e.id);
   eq(ids.filter((x, i) => ids.indexOf(x) !== i), [], 'tekrarlanan kimlik');
   const bad = [];
+  const noHand = [];
   for (const ex of E.EXERCISES) {
     try {
       const imp = new at.importer.AlphaTexImporter();
@@ -1174,9 +1175,20 @@ test('egzersizler (tarayıcısız): hepsi okunur, ölçüler tam, kimlikler teki
         .map((bar, i) => [i + 1, bar.voices[0].beats.reduce((a, x) => a + x.playbackDuration, 0), bar.masterBar.calculateDuration()])
         .filter(([, got, want]) => got !== want);
       if (sc.tracks.length !== 1 || sc.masterBars.length < 2 || short.length) bad.push(`${ex.id}: ${JSON.stringify(short)}`);
+      // Davulda tom içeren her vuruşta el sırası (R/L) yazılı olmalı (fill'ler, tom turu)
+      if (ex.inst === 'davul' && !ex.guide) {
+        const arts = sc.tracks[0].percussionArticulations;
+        for (const bar of sc.tracks[0].staves[0].bars) {
+          for (const beat of bar.voices[0].beats) {
+            const tom = beat.notes.some((n) => /^Tom|Floor Tom/.test(arts[n.percussionArticulation]?.elementType || ''));
+            if (tom && !/^[RL]$/.test(beat.text || '')) noHand.push(`${ex.id} ölçü ${bar.index + 1}`);
+          }
+        }
+      }
     } catch (e) { bad.push(`${ex.id}: ${e.message}`); }
   }
   eq(bad, [], 'okunamayan ya da ölçüsü eksik egzersiz');
+  eq([...new Set(noHand)], [], 'tom notalarında el sırası');
   const wrong = Object.entries(P.PLANS).flatMap(([inst, plan]) => plan.stages
     .flatMap((st) => P.stageIds(plan, st)).filter((id) => E.findExercise(id)?.inst !== inst));
   eq(wrong, [], 'plandaki egzersizler');

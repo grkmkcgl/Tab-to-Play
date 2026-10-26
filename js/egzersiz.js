@@ -526,6 +526,15 @@ function rock8(kicks, { top = H, crash = false, snares = [2, 6], open = [] } = {
 }
 
 const sn = (txt, accent = false) => `${S}{${accent ? 'ac ' : ''}txt "${txt}"}`;
+// El sırası: notanın üstüne R (sağ) / L (sol). `alt` sağdan başlayıp sırayla değiştirir.
+const hand = (tok, h) => fx(tok, `txt "${h}"`);
+const alt = (toks) => toks.map((x, i) => hand(x, i % 2 ? 'L' : 'R'));
+// Groove'da el sırası: hi-hat sağ el, trampet sol el; ikisi birlikte vuruluyorsa yazılmaz
+const grooveHands = (toks) => toks.map((x) => {
+  if (x === H || (x.startsWith('(') && x.includes(H) && !x.includes(S))) return hand(x, 'R');
+  if (x.startsWith(S)) return hand(x, 'L');
+  return x;
+});
 const paradiddle = ['R', 'L', 'R', 'R', 'L', 'R', 'L', 'L'];
 
 // Onaltılık ızgara: sekizlik hi-hat, kick ve trampet konumları (0–15), boş yerde sus
@@ -599,7 +608,7 @@ const DRUMS = [
     bpm: 80, min: 60, max: 130,
     bars: [
       rock8([0, 4], { crash: true }), rock8([0, 4]), rock8([0, 4]),
-      `:16 ${[...repeat([S], 4), ...repeat([T1], 4), ...repeat([T2], 4), ...repeat([FT], 4)].join(' ')}`,
+      `:16 ${alt([...repeat([S], 4), ...repeat([T1], 4), ...repeat([T2], 4), ...repeat([FT], 4)]).join(' ')}`,
     ],
   },
   {
@@ -626,12 +635,12 @@ const DRUMS = [
     id: 'd-i2', level: 'ileri', title: 'Ghost note groove',
     desc: 'Küçük notalar “ghost”: trampete çok hafif, neredeyse duyulmadan dokun. Vurgulu 2 ve 4 ile aradaki fark büyük olsun.',
     bpm: 70, min: 50, max: 110,
-    bars: repeat([`:16 ${[
+    bars: repeat([`:16 ${grooveHands([
       hit(K, H), 'r', H, `${S}{g}`,
       hit(`${S}{ac}`, H), 'r', H, `${S}{g}`,
       hit(K, H), K, H, `${S}{g}`,
       hit(`${S}{ac}`, H), `${S}{g}`, H, 'r',
-    ].join(' ')}`], 4),
+    ]).join(' ')}`], 4),
   },
   {
     id: 'd-i3', level: 'ileri', title: 'Altılık tom fill',
@@ -639,7 +648,7 @@ const DRUMS = [
     bpm: 60, min: 50, max: 110,
     bars: [
       rock8([0, 4], { crash: true }),
-      `:16 ${[S, T1, T2, FT].flatMap((d) => repeat([d], 6)).map((x) => tu(x)).join(' ')}`,
+      `:16 ${alt([S, T1, T2, FT].flatMap((d) => repeat([d], 6))).map((x) => fx(x, 'tu 3')).join(' ')}`,
     ],
   },
   {
@@ -669,9 +678,9 @@ const DRUMS = [
     desc: 'Trampetten yer tomuna kadar her davula sırayla vur, sonra geri dön: önce dörtlük, sonra sekizlik. Kollar davullar arasında rahat dolaşsın, vuruşlar eşit sesli.',
     bpm: 70, min: 50, max: 130,
     bars: [
-      `:4 ${S} ${T1} ${T2} ${FT}`, `:4 ${FT} ${T2} ${T1} ${S}`,
-      `:8 ${[S, T1, T2, FT].flatMap((d) => [d, d]).join(' ')}`,
-      `:8 ${[FT, T2, T1, S].flatMap((d) => [d, d]).join(' ')}`,
+      `:4 ${alt([S, T1, T2, FT]).join(' ')}`, `:4 ${alt([FT, T2, T1, S]).join(' ')}`,
+      `:8 ${alt([S, T1, T2, FT].flatMap((d) => [d, d])).join(' ')}`,
+      `:8 ${alt([FT, T2, T1, S].flatMap((d) => [d, d])).join(' ')}`,
     ],
   },
   {
@@ -689,7 +698,7 @@ const DRUMS = [
     bpm: 70, min: 50, max: 130,
     bars: [
       rock8([0, 4], { crash: true }), rock8([0, 4]), rock8([0, 4]),
-      `:8 ${[S, T1, T2, FT].flatMap((d) => [d, d]).join(' ')}`,
+      `:8 ${alt([S, T1, T2, FT].flatMap((d) => [d, d])).join(' ')}`,
     ],
   },
   {
@@ -734,9 +743,9 @@ const DRUMS = [
     bpm: 70, min: 50, max: 130,
     bars: [
       rock8([0, 4], { crash: true }),
-      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${[S, S, T1, T1, T2, T2, FT, FT].join(' ')}`,
+      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${alt([S, S, T1, T1, T2, T2, FT, FT]).join(' ')}`,
       rock8([0, 4], { crash: true }),
-      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${[S, S, S, S, T2, T2, FT, FT].join(' ')}`,
+      `:8 ${hit(K, H)} ${H} ${hit(S, H)} ${H} :16 ${alt([S, S, S, S, T2, T2, FT, FT]).join(' ')}`,
     ],
   },
   {
@@ -753,20 +762,20 @@ const DRUMS = [
     desc: 'Hiçbir uzuv bir başkasıyla aynı anda vurmaz: hi-hat, kick ve trampet sırayla. Onaltılık; 2 ve 4’te vurgulu trampet, aradakiler ghost.',
     bpm: 70, min: 50, max: 120,
     bars: [
-      ...repeat([`:16 ${[K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H].join(' ')}`], 3),
-      `:16 ${[K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, `${S}{g}`, K, `${S}{ac}`, T1, T2, FT].join(' ')}`,
+      ...repeat([`:16 ${grooveHands([K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H]).join(' ')}`], 3),
+      `:16 ${[...grooveHands([K, H, H, `${S}{g}`, `${S}{ac}`, H, K, H, K, H, `${S}{g}`, K, `${S}{ac}`]), ...alt([T1, T2, FT])].join(' ')}`,
     ],
   },
   {
     id: 'd-i6', level: 'ileri', title: 'Yarım zaman shuffle',
     desc: 'Triole üzerinde hi-hat “TA-a-TA”, aradaki boşluklarda trampete ghost; 3. vuruşta vurgulu trampet. Ghost notalar çok hafif, hi-hat düzenli.',
     bpm: 70, min: 50, max: 120,
-    bars: repeat([`:8 ${[
+    bars: repeat([`:8 ${grooveHands([
       hit(K, H), `${S}{g}`, H,
       H, `${S}{g}`, hit(K, H),
       hit(`${S}{ac}`, H), 'r', H,
       H, `${S}{g}`, hit(K, H),
-    ].map((x) => fx(x, 'tu 3')).join(' ')}`], 4),
+    ]).map((x) => fx(x, 'tu 3')).join(' ')}`], 4),
   },
   {
     id: 'd-i7', level: 'ileri', title: 'Altılık rulo (six stroke roll)',
