@@ -49,6 +49,7 @@ function loadPrefs() {
     dark: false,
     // Son yedeğin alındığı an (Ayarlar'da hatırlatmak için)
     lastBackup: 0,
+    libList: '', // kütüphanede seçili çalma listesi ('' = tüm şarkılar)
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
@@ -229,23 +230,76 @@ async function showLibrary() {
   showView('libView');
   document.title = 'Tab-to-Play';
   songs = await db.allSongs();
+  try { lists = (await db.allLists()).sort((a, b) => a.name.localeCompare(b.name, 'tr')); } catch { lists = []; }
   renderList();
+}
+
+// ---------------------------------------------------------------- çalma listeleri
+// { id, name, songs: [şarkı kimlikleri, sırayla], updated }. Seçili listede şarkılar listenin
+// sırasıyla, numaralı ve ↑/↓ ile; listeden açılan şarkıda çalarda "Sonraki" çubuğu.
+let lists = [];
+let playFrom = null; // { id } : çalardaki şarkı bu listeden açıldı
+const activeList = () => lists.find((l) => l.id === prefs.libList) || null;
+
+// Çalarda liste çubuğu: liste adı, sıra, sonraki şarkı
+function updatePlayList() {
+  const L = playFrom && !cur?.ex ? lists.find((l) => l.id === playFrom.id) : null;
+  const i = L ? L.songs.indexOf(cur.id) : -1;
+  $('#playList').hidden = i < 0;
+  if (i < 0) return;
+  const next = songs.find((s) => s.id === L.songs[i + 1]);
+  $('#playListInfo').textContent = `${i + 1}/${L.songs.length} · ${L.name}`; // sıra başta: uzun ad kesilse de görünsün
+  $('#playNext').textContent = next ? `Sonraki: ${next.title} ›` : 'Listenin sonu';
+  $('#playNext').disabled = !next;
+  $('#playNext').dataset.id = next?.id || '';
+}
+$('#playNext').addEventListener('click', () => {
+  const id = $('#playNext').dataset.id;
+  if (id) location.hash = `#/sarki/${id}`;
+});
+async function saveList(l) {
+  l.updated = Date.now();
+  await db.putList(l);
+}
+function renderListBar() {
+  const act = activeList();
+  $('#listBar').replaceChildren(
+    el('button', { class: 'chip', type: 'button', 'data-list': '', 'aria-pressed': String(!act), text: 'Tüm şarkılar' }),
+    ...lists.map((l) => el('button', { class: 'chip', type: 'button', 'data-list': l.id, 'aria-pressed': String(act === l) },
+      el('span', { text: l.name }), el('small', { text: ` · ${l.songs.length}` }))),
+    el('button', { class: 'chip', type: 'button', id: 'listNew', text: '＋ Yeni liste' }));
+  $('#listHead').hidden = !act;
+  if (act) $('#listInfo').textContent = `${act.name} · ${act.songs.length} şarkı`;
 }
 
 function renderList() {
   const q = norm($('#q').value.trim());
-  let list = songs.filter((s) => (!favOnly || s.fav) && (!q || norm(`${s.title} ${s.artist} ${s.file}`).includes(q)));
-  const sort = prefs.sort;
-  if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title, 'tr'));
-  else if (sort === 'added') list.sort((a, b) => b.added - a.added);
-  else list.sort((a, b) => (b.opened || b.added) - (a.opened || a.added));
-  $('#songList').replaceChildren(...list.map(songItem));
+  const act = activeList();
+  const match = (s) => (!favOnly || s.fav) && (!q || norm(`${s.title} ${s.artist} ${s.file}`).includes(q));
+  let list;
+  if (act) {
+    // Listede: listenin sırası (sıralama seçimi uygulanmaz)
+    const byId = new Map(songs.map((s) => [s.id, s]));
+    list = act.songs.map((id) => byId.get(id)).filter((s) => s && match(s));
+  } else {
+    list = songs.filter(match);
+    const sort = prefs.sort;
+    if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title, 'tr'));
+    else if (sort === 'added') list.sort((a, b) => b.added - a.added);
+    else list.sort((a, b) => (b.opened || b.added) - (a.opened || a.added));
+  }
+  $('#sort').disabled = !!act;
+  renderListBar();
+  $('#songList').replaceChildren(...list.map((s) => songItem(s, act)));
   $('#welcome').hidden = songs.length > 0;
   $('#libTools').hidden = songs.length === 0;
   $('#noResult').hidden = !(songs.length > 0 && list.length === 0);
+  $('#noResult').textContent = act && !act.songs.length
+    ? 'Bu liste boş. Bir şarkının ⋮ menüsünden “Listeye ekle”ye dokun.'
+    : 'Aramana uyan şarkı yok.';
 }
 
-function songItem(s) {
+function songItem(s, inList = null) {
   const counts = {};
   for (const t of s.tracks) counts[t.kind] = (counts[t.kind] || 0) + 1;
   const kinds = el('span', { class: 'kinds' }, ...Object.entries(counts).map(([k, n]) =>
@@ -253,11 +307,21 @@ function songItem(s) {
   const sub = el('span', { class: 'song-sub' });
   if (s.artist) sub.append(el('span', { text: s.artist }));
   sub.append(kinds);
+  const idx = inList ? inList.songs.indexOf(s.id) : -1;
+  const title = el('span', { class: 'song-title' });
+  if (inList) title.append(el('span', { class: 'order', text: `${idx + 1}.` }));
+  title.append(s.title);
   return el('li', { class: 'song', 'data-id': s.id },
-    el('button', { class: 'song-main', type: 'button', 'data-act': 'open' }, el('span', { class: 'song-title', text: s.title }), sub),
+    el('button', { class: 'song-main', type: 'button', 'data-act': 'open' }, title, sub),
     el('button', { class: 'icon-btn fav', type: 'button', 'data-act': 'fav', 'aria-pressed': String(!!s.fav), 'aria-label': 'Favori' }, icon('star')),
     el('button', { class: 'icon-btn', type: 'button', 'data-act': 'more', 'aria-label': 'Diğer işlemler', 'aria-expanded': 'false' }, icon('more')),
     el('div', { class: 'song-actions', hidden: true },
+      ...(inList ? [
+        el('button', { class: 'btn', type: 'button', 'data-act': 'up', text: '↑ Yukarı', disabled: idx === 0 }),
+        el('button', { class: 'btn', type: 'button', 'data-act': 'down', text: '↓ Aşağı', disabled: idx === inList.songs.length - 1 }),
+        el('button', { class: 'btn', type: 'button', 'data-act': 'unlist', text: 'Listeden çıkar' }),
+      ] : []),
+      el('button', { class: 'btn', type: 'button', 'data-act': 'lists', text: 'Listeye ekle' }),
       el('button', { class: 'btn', type: 'button', 'data-act': 'share', text: 'Paylaş' }),
       el('button', { class: 'btn danger', type: 'button', 'data-act': 'del', text: 'Sil' })));
 }
@@ -286,7 +350,24 @@ $('#songList').addEventListener('click', async (e) => {
   const s = songs.find((x) => x.id === li.dataset.id);
   if (!s) return;
   const act = btn.dataset.act;
-  if (act === 'open') location.hash = `#/sarki/${s.id}`;
+  const L = activeList();
+  if (act === 'open') {
+    playFrom = L ? { id: L.id } : null; // listeden açıldıysa çalarda "Sonraki"
+    location.hash = `#/sarki/${s.id}`;
+  } else if (act === 'up' || act === 'down') {
+    const i = L.songs.indexOf(s.id);
+    const j = i + (act === 'up' ? -1 : 1);
+    if (j < 0 || j >= L.songs.length) return;
+    [L.songs[i], L.songs[j]] = [L.songs[j], L.songs[i]];
+    await saveList(L);
+    renderList();
+    $(`#songList [data-id="${s.id}"] [data-act="more"]`)?.click(); // işlemler açık kalsın
+  } else if (act === 'unlist') {
+    L.songs = L.songs.filter((x) => x !== s.id);
+    await saveList(L);
+    renderList();
+    toast(`“${L.name}” listesinden çıkarıldı`);
+  } else if (act === 'lists') openListDlg(s);
   else if (act === 'fav') {
     s.fav = !s.fav;
     btn.setAttribute('aria-pressed', String(s.fav));
@@ -301,11 +382,97 @@ $('#songList').addEventListener('click', async (e) => {
     if (!confirm(`“${s.title}” kütüphaneden silinsin mi?`)) return;
     await db.deleteSong(s.id);
     songs = songs.filter((x) => x.id !== s.id);
+    for (const l of lists.filter((x) => x.songs.includes(s.id))) {
+      l.songs = l.songs.filter((x) => x !== s.id);
+      await saveList(l);
+    }
     renderList();
     toast('Şarkı silindi');
   }
 });
 $('#q').addEventListener('input', renderList);
+
+// Liste seçimi, yeni liste, adını değiştir, sil
+async function newList(name) {
+  const l = { id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: name.trim(), songs: [] };
+  await saveList(l);
+  lists.push(l);
+  lists.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  return l;
+}
+$('#listBar').addEventListener('click', async (e) => {
+  if (e.target.closest('#listNew')) {
+    const name = prompt('Yeni listenin adı (ör. Prova, Konser):');
+    if (!name?.trim()) return;
+    const l = await newList(name);
+    prefs.libList = l.id;
+    savePrefs();
+    renderList();
+    toast('Liste oluşturuldu', 2000);
+    return;
+  }
+  const id = e.target.closest('[data-list]')?.dataset.list;
+  if (id == null) return;
+  prefs.libList = id;
+  savePrefs();
+  renderList();
+});
+$('#listRename').addEventListener('click', async () => {
+  const L = activeList();
+  const name = L && prompt('Listenin yeni adı:', L.name);
+  if (!name?.trim()) return;
+  L.name = name.trim();
+  await saveList(L);
+  lists.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  renderList();
+});
+$('#listDelete').addEventListener('click', async () => {
+  const L = activeList();
+  if (!L || !confirm(`“${L.name}” listesi silinsin mi? Şarkılar kütüphanede kalır.`)) return;
+  await db.deleteList(L.id);
+  lists = lists.filter((x) => x !== L);
+  prefs.libList = '';
+  savePrefs();
+  renderList();
+  toast('Liste silindi');
+});
+
+// Listeye ekle penceresi: her liste için işaret kutusu, işaretleyince eklenir/çıkarılır
+let listDlgSong = null;
+function renderListDlg() {
+  const s = listDlgSong;
+  $('#listDlgSong').textContent = s.title;
+  $('#listChecks').replaceChildren(...lists.map((l) => el('li', {},
+    el('label', { class: 'switch' },
+      el('input', { type: 'checkbox', 'data-list': l.id, checked: l.songs.includes(s.id) }),
+      el('span', { text: `${l.name} · ${l.songs.length}` })))));
+  if (!lists.length) $('#listChecks').append(el('li', { class: 'muted small', text: 'Henüz liste yok; aşağıdan bir tane oluştur.' }));
+}
+function openListDlg(s) {
+  listDlgSong = s;
+  $('#newListName').value = '';
+  renderListDlg();
+  $('#listDlg').showModal();
+}
+$('#listChecks').addEventListener('change', async (e) => {
+  const l = lists.find((x) => x.id === e.target.dataset.list);
+  if (!l) return;
+  l.songs = e.target.checked ? [...l.songs.filter((x) => x !== listDlgSong.id), listDlgSong.id] : l.songs.filter((x) => x !== listDlgSong.id);
+  await saveList(l);
+  renderListDlg();
+  renderList();
+});
+$('#newListAdd').addEventListener('click', async () => {
+  const name = $('#newListName').value;
+  if (!name.trim()) { $('#newListName').focus(); return; }
+  const l = await newList(name);
+  l.songs.push(listDlgSong.id);
+  await saveList(l);
+  $('#newListName').value = '';
+  renderListDlg();
+  renderList();
+});
+$('#listDlg [data-close-dlg]').addEventListener('click', () => $('#listDlg').close());
 $('#sort').value = prefs.sort;
 $('#sort').addEventListener('change', () => { prefs.sort = $('#sort').value; savePrefs(); renderList(); });
 $('#favOnly').addEventListener('click', () => {
@@ -623,6 +790,7 @@ function showPlayer(song, sc) {
   $('#playerView').classList.toggle('ex', !!song.ex);
   $('#pTitle').textContent = song.title;
   $('#pArtist').textContent = song.artist || stripExt(song.file || '');
+  updatePlayList();
   document.title = `${song.title} · Tab-to-Play`;
   renderPresets();
 
@@ -2030,6 +2198,7 @@ async function route() {
   let m;
   if ((m = h.match(/^#\/sarki\/([\w-]+)/))) {
     cameFromList = lastView === 'lib' || lastView === 'plan'; // plandaki şarkı önerisinden de geri dönülür
+    if (lastView !== 'lib' && lastView !== 'player') playFrom = null; // liste çubuğu yalnızca listeden açılınca
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {

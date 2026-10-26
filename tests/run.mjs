@@ -1134,6 +1134,87 @@ test('esnek plan: günlük süre 15/30/45 dk, aşamaya hazır olunca öneri, şa
   await app.close();
 }, { webkit: true });
 
+test('çalma listeleri: oluştur, şarkı ekle, sırala, listede sonraki şarkı, çıkar, adını değiştir, sil, yedekte', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  let answer = 'Prova';
+  app.onDialog = (d) => d.accept(d.type() === 'prompt' ? answer : undefined);
+  await app.addFiles('test-sarki.gp', 'baska.gp', 'xml-deneme.musicxml');
+  await app.toast(/3 şarkı eklendi/);
+  await p.waitForFunction(() => document.querySelectorAll('#songList .song').length === 3);
+  const song = (title) => `#songList .song:has-text("${title}")`;
+  // Liste işlemleri diske yazıp sonra çizer: sonucu bekle
+  const titlesAre = async (want, msg) => {
+    await p.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#songList .song-title')].map((e) => e.textContent)) === JSON.stringify(w), want, { timeout: 5000 }).catch(() => {});
+    eq(await app.titles(), want, msg);
+  };
+  const textIs = async (sel, want, msg) => {
+    await p.waitForFunction(([q, w]) => document.querySelector(q)?.textContent === w, [sel, want], { timeout: 5000 }).catch(() => {});
+    eq(await app.text(sel), want, msg);
+  };
+  const more = async (title, act) => {
+    if (!(await p.isVisible(`${song(title)} [data-act="${act}"]`))) await app.click(`${song(title)} [data-act="more"]`);
+    await app.click(`${song(title)} [data-act="${act}"]`);
+  };
+  // Yeni liste: seçili olur, boş
+  await app.click('#listNew');
+  await app.toast(/Liste oluşturuldu/);
+  eq(await p.$$eval('#listBar [aria-pressed="true"]', (els) => els.map((e) => e.textContent)), ['Prova · 0'], 'yeni liste seçili');
+  await titlesAre([], 'boş liste');
+  assert((await app.text('#noResult')).includes('Listeye ekle'), 'boş liste ipucu');
+  // Tüm şarkılara dön, iki şarkıyı listeye ekle (biri pencereden yeni listeyle)
+  await app.click('#listBar [data-list=""]');
+  await more('Akşam Provası', 'lists');
+  await app.click('#listChecks label:has-text("Prova")');
+  await app.click('#listDlg [data-close-dlg]');
+  await more('Test Şarkısı', 'lists');
+  await app.click('#listChecks label:has-text("Prova")');
+  await p.fill('#newListName', 'Konser');
+  await app.click('#newListAdd');
+  await p.waitForFunction(() => document.querySelectorAll('#listChecks input').length === 2);
+  eq(await p.$$eval('#listChecks input', (els) => els.map((e) => e.checked)), [true, true], 'iki listede');
+  await app.ev(() => document.querySelector('#listDlg').close());
+  await app.click('#listBar [data-list]:has-text("Prova")');
+  await titlesAre(['1.Akşam Provası', '2.Test Şarkısı'], 'eklenme sırası');
+  await textIs('#listInfo', 'Prova · 2 şarkı', 'liste bilgisi');
+  // Sırala: ikinciyi yukarı al
+  await more('Test Şarkısı', 'up');
+  await titlesAre(['1.Test Şarkısı', '2.Akşam Provası'], 'yukarı alındı');
+  // Listeden aç: çalarda liste çubuğu ve sonraki şarkı
+  await app.click(`${song('Test Şarkısı')} .song-main`);
+  await app.ready();
+  eq([await app.text('#playListInfo'), await app.text('#playNext')], ['1/2 · Prova', 'Sonraki: Akşam Provası ›'], 'liste çubuğu');
+  await app.click('#playNext');
+  await p.waitForFunction(() => document.querySelector('#pTitle').textContent === 'Akşam Provası');
+  await app.ready();
+  eq([await app.text('#playListInfo'), await app.text('#playNext'), await p.isDisabled('#playNext')], ['2/2 · Prova', 'Listenin sonu', true], 'listenin sonu');
+  await app.click('#btnBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  // Tüm şarkılardan açılınca liste çubuğu yok
+  await app.click('#listBar [data-list=""]');
+  await app.click(`${song('XML Deneme')} .song-main`);
+  await app.ready();
+  assert(!(await p.isVisible('#playList')), 'listesiz açılışta çubuk yok');
+  await app.click('#btnBack');
+  await p.waitForSelector('#libView:not([hidden])');
+  // Listeden çıkar, adını değiştir, sil
+  await app.click('#listBar [data-list]:has-text("Prova")');
+  await more('Akşam Provası', 'unlist');
+  await titlesAre(['1.Test Şarkısı'], 'listeden çıkarıldı');
+  answer = 'Provalar';
+  await app.click('#listRename');
+  await textIs('#listInfo', 'Provalar · 1 şarkı', 'yeni ad');
+  // Seçim kalıcı; yedekte listeler var
+  await p.reload();
+  await p.waitForSelector('#libView:not([hidden]) #listHead:not([hidden])');
+  await titlesAre(['1.Test Şarkısı'], 'seçili liste kalıcı');
+  eq(await app.ev(async () => { const { db } = await import('./js/db.js?v=__SURUM__'); return (await db.allLists()).map((l) => l.name).sort(); }), ['Konser', 'Provalar'], 'listeler saklandı');
+  await app.click('#listDelete');
+  await app.toast(/Liste silindi/);
+  eq([await app.titles().then((x) => x.length), await p.$$eval('#listBar .chip', (els) => els.map((e) => e.textContent))], [3, ['Tüm şarkılar', 'Konser · 1', '＋ Yeni liste']], 'liste silindi, şarkılar kaldı');
+  await app.close();
+}, { webkit: true });
+
 test('egzersiz: tempo BPM ile, metronom ve sayma açık, döngüde çalar, tempo saklanır; şarkılar etkilenmez', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;

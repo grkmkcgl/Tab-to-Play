@@ -58,6 +58,13 @@
     </select>
     <button id="favOnly" class="chip" type="button" aria-pressed="false" aria-label="Yalnızca favoriler"><svg class="ic"><use href="#i-star"/></svg></button>
   </div>
+  <!-- Çalma listeleri: seçili liste şarkıları kendi sırasıyla gösterir -->
+  <div id="listBar" class="list-bar scroll-x" role="group" aria-label="Çalma listeleri"></div>
+  <div id="listHead" class="list-head" hidden>
+    <span id="listInfo" class="muted small"></span>
+    <button id="listRename" class="btn small-btn" type="button">Adını değiştir</button>
+    <button id="listDelete" class="btn small-btn danger" type="button">Listeyi sil</button>
+  </div>
   <ul id="songList" class="song-list"></ul>
   <p id="noResult" class="muted center" hidden>Aramana uyan şarkı yok.</p>
   <div id="welcome" class="welcome" hidden>
@@ -297,6 +304,11 @@
     <div class="song-head"><b id="pTitle"></b><span id="pArtist"></span></div>
     <button id="btnTrack" class="chip track-chip" type="button" data-panel="mix" aria-label="Parti seç"></button>
   </header>
+  <!-- Listeden açılan şarkıda: liste adı, sıra, sonraki şarkı -->
+  <div id="playList" class="play-list" hidden>
+    <span id="playListInfo"></span>
+    <button id="playNext" class="btn small-btn" type="button"></button>
+  </div>
   <main id="sheetWrap" class="sheet-wrap">
     <div id="sheet"></div>
     <div id="loading" class="loading" hidden><span class="spinner"></span><span id="loadingText">Yükleniyor…</span></div>
@@ -411,6 +423,16 @@
     <button type="button" class="btn" data-inst="bas">🎸 Bas</button>
     <button type="button" class="btn" data-inst="davul">🥁 Davul</button>
     <button type="button" class="btn" data-inst="diger">🎹 Diğer</button>
+  </div>
+</dialog>
+
+<dialog id="listDlg" class="dlg">
+  <div class="panel-head"><h2>Listeye ekle</h2><button class="icon-btn" type="button" data-close-dlg aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+  <p id="listDlgSong" class="muted"></p>
+  <ul id="listChecks" class="list-checks"></ul>
+  <div class="btn-row new-list">
+    <input id="newListName" type="text" placeholder="Yeni liste adı (ör. Prova)" autocomplete="off" aria-label="Yeni liste adı">
+    <button id="newListAdd" class="btn" type="button">Oluştur ve ekle</button>
   </div>
 </dialog>
 
