@@ -1008,14 +1008,16 @@ test('yedekleme: hepsi tek dosyaya iner, başka cihazda geri yüklenir, ikinci y
   await app2.close();
 });
 
-test('nota okuma rehberi: davul ve gitar, açıklamalar, notada gör ve dinle, çalışma sayılmaz, geri dönüş', async (b, t) => {
+test('nota okuma rehberi: egzersiz ekranındaki enstrümana göre, açıklamalar, notada gör ve dinle, çalışma sayılmaz, geri dönüş', async (b, t) => {
   const app = await App.open(b, t, { inst: 'davul' });
   const p = app.page;
   await app.click('#btnEx');
   await p.waitForSelector('#exView:not([hidden])');
+  assert((await app.text('#guideCardSub')).includes('Davul notası'), 'kart davula göre');
   await app.click('#btnGuide');
   await p.waitForSelector('#guideView:not([hidden])');
-  eq(await app.pressed('#segGuide'), ['davul'], 'davulcuya davul rehberi');
+  // Ayrı enstrüman seçimi yok: egzersiz ekranında seçili olan (davul)
+  eq([await p.$$eval('#guideView .seg', (els) => els.length), await app.text('#guideTitle')], [0, 'Davul notası rehberi'], 'davul rehberi, seçim yok');
   const davul = await app.text('[data-guide="davul"]');
   for (const w of ['Kick', 'Ayak hi-hat', 'Trampet', 'ghost', 'flam']) assert(davul.includes(w), `davul rehberinde ${w}`);
   assert(!(await p.isVisible('[data-guide="gitar"]')), 'gitar bölümü gizli');
@@ -1033,7 +1035,16 @@ test('nota okuma rehberi: davul ve gitar, açıklamalar, notada gör ve dinle, �
   eq(await app.ev(async () => { const { db } = await import('./js/db.js?v=__SURUM__'); return (await db.allDays()).length; }), 0, 'rehber çalışma sayılmaz');
   await app.click('#btnBack');
   await p.waitForSelector('#guideView:not([hidden])');
-  await app.click('#segGuide [data-v="gitar"]');
+  assert(await p.isVisible('[data-guide="davul"]'), 'rehbere davulda dönüldü');
+  // Egzersiz ekranında gitar seçilince rehber tab rehberi olur
+  await app.click('#guideBack');
+  await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="gitar"]');
+  assert((await app.text('#guideCardSub')).includes('Tab'), 'kart gitara göre');
+  await app.click('#btnGuide');
+  await p.waitForSelector('#guideView:not([hidden])');
+  eq(await app.text('#guideTitle'), 'Tab okuma rehberi', 'tab rehberi');
+  assert(!(await p.isVisible('[data-guide="davul"]')), 'davul bölümü gizli');
   const gitar = await app.text('[data-guide="gitar"]');
   for (const w of ['ince Mi', 'çekiç', 'palm mute', 'flajole']) assert(gitar.includes(w), `gitar rehberinde ${w}`);
   await app.click('[data-open="r-gitar"]');
@@ -1050,7 +1061,7 @@ test('nota okuma rehberi: davul ve gitar, açıklamalar, notada gör ve dinle, �
   await app.panel('view');
   await app.click('#viewGuide');
   await p.waitForSelector('#guideView:not([hidden])');
-  eq(await app.pressed('#segGuide'), ['davul'], 'davul partisi açıkken davul rehberi');
+  eq(await app.text('#guideTitle'), 'Davul notası rehberi', 'davul partisi açıkken davul rehberi (egzersizde gitar seçili olsa da)');
   await app.click('#guideBack');
   await app.ready();
   eq(await app.text('#pTitle'), 'Deneme Riffi', 'çalara döndü');
@@ -1240,14 +1251,17 @@ test('akort aleti (tarayıcısız): perde bulma saf ve harmonikli seste, bas tel
   eq([A.nearestString('gitar', 108).n, A.nearestString('bas', 41.5).n, A.TUNINGS.gitar.length, A.TUNINGS.bas.length], [5, 4, 6, 4], 'en yakın tel');
 }, { node: true });
 
-test('akort aleti: mikrofonla La (110 Hz) bulunur, 5. tel işaretlenir, akortlu; izin yoksa ne yapılacağı söylenir; ekrandan çıkınca mikrofon kapanır', async (b, t) => {
+test('akort aleti: yalnızca gitarda; mikrofonla La (110 Hz) bulunur, 5. tel işaretlenir, akortlu; basçıya bas telleri; izin yoksa ne yapılacağı söylenir; ekrandan çıkınca mikrofon kapanır', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
   await app.click('#btnEx');
   await p.waitForSelector('#exView:not([hidden])');
+  await app.click('#segExInst [data-v="davul"]');
+  assert(!(await p.isVisible('#btnTuner')), 'davulda akort aleti yok');
+  await app.click('#segExInst [data-v="gitar"]');
   await app.click('#btnTuner');
   await p.waitForSelector('#tunerView:not([hidden])');
-  eq([await app.pressed('#segTuner'), await p.$$eval('#tStrings li', (els) => els.length)], [['gitar'], 6], 'gitar telleri');
+  eq([await p.$$eval('#tunerView .seg', (els) => els.length), await p.$$eval('#tStrings li', (els) => els.length)], [0, 6], 'seçim yok, gitar telleri');
   await app.click('#tStart');
   await p.waitForFunction(() => document.querySelector('#tNote').textContent === 'La', null, { timeout: 10000 });
   eq(await app.text('#tNoteEn'), 'A2', 'La 2');
@@ -1255,20 +1269,21 @@ test('akort aleti: mikrofonla La (110 Hz) bulunur, 5. tel işaretlenir, akortlu;
   await p.waitForFunction(() => document.querySelector('#tState').textContent.includes('Akortlu'), null, { timeout: 5000 });
   near(parseFloat(await app.text('#tFreq')), 110, 'frekans (Hz)', 1);
   eq(await app.text('#tStart span'), 'Durdur', 'düğme durdur');
-  // Bas: dört tel
-  await app.click('#segTuner [data-v="bas"]');
-  eq(await p.$$eval('#tStrings li', (els) => els.length), 4, 'bas telleri');
+  // Bas tellerine küçük bağlantıyla geçilir
+  await app.click('#tSwitch');
+  eq([await p.$$eval('#tStrings li', (els) => els.length), await app.text('#tSwitch')], [4, 'Gitar tellerini göster'], 'bas telleri');
   // Ekrandan çıkınca mikrofon kapanır
   await app.click('#tBack');
   await p.waitForSelector('#exView:not([hidden])');
   eq(await app.ev(() => ttpTuner.running), false, 'mikrofon kapandı');
   await app.close();
-  // İzin verilmezse ne yapılacağı söylenir
-  const app2 = await App.open(b, t);
+  // Basçı: bas telleriyle açılır. İzin verilmezse ne yapılacağı söylenir
+  const app2 = await App.open(b, t, { inst: 'bas' });
   await app2.page.addInitScript(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('izin yok', 'NotAllowedError')); });
   await app2.page.reload();
   await app2.ev(() => { location.hash = '#/akort'; });
   await app2.page.waitForSelector('#tunerView:not([hidden])');
+  eq(await app2.page.$$eval('#tStrings li', (els) => els.length), 4, 'basçıya bas telleri');
   await app2.click('#tStart');
   await app2.page.waitForFunction(() => document.querySelector('#tState').textContent.includes('izni'));
   assert((await app2.text('#tState')).includes('mikrofon izni ver'), 'izin mesajı');

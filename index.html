@@ -105,7 +105,7 @@
     </button>
     <button id="btnGuide" class="metro-card" type="button">
       <svg class="ic"><use href="#i-guide"/></svg>
-      <span><b>Nota okuma rehberi</b><small>Davul notası ve tab işaretleri: ne anlama gelir, nasıl duyulur.</small></span>
+      <span><b>Nota okuma rehberi</b><small id="guideCardSub">Tab işaretleri: ne anlama gelir, nasıl duyulur.</small></span>
     </button>
     <button id="btnHist" class="metro-card" type="button">
       <svg class="ic"><use href="#i-chart"/></svg>
@@ -113,7 +113,7 @@
     </button>
     <button id="btnTuner" class="metro-card" type="button">
       <svg class="ic"><use href="#i-tuner"/></svg>
-      <span><b>Akort aleti</b><small>Gitar ve bas: mikrofonla teli dinler, pes mi tiz mi gösterir.</small></span>
+      <span><b>Akort aleti</b><small>Mikrofonla teli dinler, pes mi tiz mi gösterir.</small></span>
     </button>
     <button id="btnMetro" class="metro-card" type="button">
       <svg class="ic"><use href="#i-metro"/></svg>
@@ -187,12 +187,10 @@
 <section id="guideView" class="view" hidden>
   <header class="topbar">
     <button id="guideBack" class="icon-btn" type="button" aria-label="Geri dön"><svg class="ic"><use href="#i-back"/></svg></button>
-    <h1 class="view-title">Nota okuma rehberi</h1>
+    <h1 class="view-title" id="guideTitle">Nota okuma rehberi</h1>
   </header>
+  <!-- Egzersiz ekranında seçili enstrümanın bölümü görünür (çalardan açılınca çalınan partinin) -->
   <div class="ex-wrap guide">
-    <div class="seg wide" id="segGuide" role="group" aria-label="Rehber">
-      <button type="button" data-v="davul">🥁 Davul notası</button><button type="button" data-v="gitar">🎸 Gitar tabı</button>
-    </div>
 
     <div data-guide="davul">
       <button class="btn primary guide-open" type="button" data-open="r-davul">Notada gör ve dinle</button>
@@ -260,9 +258,6 @@
     <h1 class="view-title">Akort aleti</h1>
   </header>
   <div class="tuner">
-    <div class="seg wide" id="segTuner" role="group" aria-label="Enstrüman">
-      <button type="button" data-v="gitar">🎸 Gitar</button><button type="button" data-v="bas">🎸 Bas</button>
-    </div>
     <div class="t-note"><b id="tNote">–</b><span id="tNoteEn"></span></div>
     <div class="t-meter off" aria-hidden="true">
       <i class="t-zone"></i><i class="t-mid"></i><i id="tNeedle" class="t-needle"></i>
@@ -271,6 +266,7 @@
     <p id="tState" class="t-state" aria-live="polite">Mikrofonu aç ve bir teli tek başına çal.</p>
     <p id="tFreq" class="muted small t-freq"></p>
     <ol id="tStrings" class="t-strings"></ol>
+    <button id="tSwitch" class="link-btn" type="button"></button>
     <button id="tStart" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Mikrofonu aç</span></button>
     <p class="muted small">Standart akort, La = 440 Hz. Pes: ses düşük, teli sıkıştır. Tiz: ses yüksek, teli gevşet.</p>
   </div>

@@ -1579,6 +1579,11 @@ function renderExList() {
   $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
   $('#exList').replaceChildren(...list.map((x) => exRow(x)));
+  // Kartlar seçili enstrümana göre: akort aleti yalnızca gitarda, rehber o enstrümanın
+  $('#btnTuner').hidden = inst !== 'gitar';
+  $('#guideCardSub').textContent = inst === 'davul'
+    ? 'Davul notası: hangi çizgi hangi davul, nota başları, vurgu, ghost, flam.'
+    : 'Tab işaretleri: teller, perdeler, çekiç, bend, palm mute… ne anlama gelir.';
 }
 
 // Egzersiz satırı; planda hedef tempo ve bugün çalışıldıysa ✓
@@ -1739,29 +1744,25 @@ $('#planView').addEventListener('click', (e) => {
 });
 
 // ---------------------------------------------------------------- nota okuma rehberi
-// Açıklamalar index.html'de; notalar egzersiz gibi çalarda açılır (r-davul, r-gitar)
-let guideInst = null;
+// Açıklamalar index.html'de; notalar egzersiz gibi çalarda açılır (r-davul, r-gitar). Ayrı bir
+// enstrüman seçimi yok: Egzersiz ekranında seçili enstrüman, çalardan açılınca çalınan parti.
+let guideInst = null; // çalardan açılınca o partinin rehberi; yoksa egzersiz ekranındaki seçim
 function showGuide() {
   showView('guideView');
-  document.title = 'Nota okuma rehberi · Tab-to-Play';
-  guideInst ||= exInst();
-  renderGuide();
+  const inst = guideInst || exInst();
+  const title = inst === 'davul' ? 'Davul notası rehberi' : 'Tab okuma rehberi';
+  $('#guideTitle').textContent = title;
+  document.title = `${title} · Tab-to-Play`;
+  $$('[data-guide]').forEach((d) => { d.hidden = d.dataset.guide !== inst; });
 }
-function renderGuide() {
-  $$('#segGuide button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === guideInst)));
-  $$('[data-guide]').forEach((d) => { d.hidden = d.dataset.guide !== guideInst; });
-}
-$('#segGuide').addEventListener('click', (e) => {
-  const v = e.target.closest('button')?.dataset.v;
-  if (!v) return;
-  guideInst = v;
-  renderGuide();
-});
 $('#guideView').addEventListener('click', (e) => {
   const id = e.target.closest('[data-open]')?.dataset.open;
   if (id) location.hash = `#/egzersiz/${id}`;
 });
-$('#btnGuide').addEventListener('click', () => { location.hash = '#/rehber'; });
+$('#btnGuide').addEventListener('click', () => {
+  guideInst = null;
+  location.hash = '#/rehber';
+});
 $('#viewGuide').addEventListener('click', () => {
   // Çalardaki parti davulsa davul rehberi
   guideInst = cur?.tracks[shown]?.kind === 'davul' ? 'davul' : cur?.tracks[shown]?.tab ? 'gitar' : null;
@@ -1833,14 +1834,15 @@ function renderHistory() {
 
   // Tempo gelişimi: en son çalışılan egzersiz önce
   const last = new Map();
-  for (const d of histDays) for (const [id, it] of Object.entries(d.items)) if (it.kind === 'ex' && it.bpm && findExercise(id)) last.set(id, d.day);
+  // Egzersiz ekranında seçili enstrümanın egzersizleri
+  for (const d of histDays) for (const [id, it] of Object.entries(d.items)) if (it.kind === 'ex' && it.bpm && findExercise(id)?.inst === exInst()) last.set(id, d.day);
   const exIds = [...last.keys()].sort((a, b) => (last.get(a) < last.get(b) ? 1 : -1));
   $('#hTempoBox').hidden = !exIds.length;
   if (exIds.length) {
     if (!exIds.includes(histEx)) histEx = exIds[0];
     $('#hEx').replaceChildren(...exIds.map((id) => {
       const x = findExercise(id);
-      return el('option', { value: id, text: `${KIND_LABEL[x.inst]} · ${x.title}` });
+      return el('option', { value: id, text: x.title });
     }));
     $('#hEx').value = histEx;
     const x = findExercise(histEx);
@@ -1964,10 +1966,11 @@ function lineChart(box, sel, data, { ref, refLabel }) {
 // sonra söner. ±5 sent akortlu sayılır.
 const tuner = new Tuner();
 window.ttpTuner = tuner; // testler için
+// Teller Ayarlar'daki enstrümana göre (bas → bas telleri); küçük bağlantıyla öbürüne geçilir.
 let tunerInst = null;
 let tunerShown = { cents: 0, at: 0 };
 function renderTunerStrings() {
-  $$('#segTuner button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === tunerInst)));
+  $('#tSwitch').textContent = tunerInst === 'bas' ? 'Gitar tellerini göster' : 'Bas tellerini göster';
   $('#tStrings').classList.toggle('bas', tunerInst === 'bas');
   $('#tStrings').replaceChildren(...TUNINGS[tunerInst].map(([n, midi]) => {
     const name = noteName(midi);
@@ -1978,7 +1981,7 @@ function renderTunerStrings() {
 function showTuner() {
   showView('tunerView');
   document.title = 'Akort aleti · Tab-to-Play';
-  tunerInst ||= prefs.instrument === 'bas' ? 'bas' : 'gitar';
+  tunerInst = prefs.instrument === 'bas' ? 'bas' : 'gitar';
   renderTunerStrings();
   updateTunerButton();
 }
@@ -2034,10 +2037,8 @@ $('#tStart').addEventListener('click', async () => {
   }
   updateTunerButton();
 });
-$('#segTuner').addEventListener('click', (e) => {
-  const v = e.target.closest('button')?.dataset.v;
-  if (!v) return;
-  tunerInst = v;
+$('#tSwitch').addEventListener('click', () => {
+  tunerInst = tunerInst === 'bas' ? 'gitar' : 'bas';
   renderTunerStrings();
 });
 $('#btnTuner').addEventListener('click', () => { location.hash = '#/akort'; });
