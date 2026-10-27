@@ -510,6 +510,14 @@ test('partiler: kendi partimi sessize al, solo, ses düzeyi, parti değiştirme'
   await app.page.waitForFunction(() => ttpApi.tracks[0].index === 2);
   assert((await app.text('#btnTrack')).includes('Davul'), 'başlık davul');
   assert(!(await app.page.isChecked('#muteMine')), 'davul sessiz değil');
+  // Kayıt veritabanına yazılmadan yenilenmesin (yavaş makinede yazma yarıda kalıyordu)
+  await app.page.waitForFunction(() => new Promise((res) => {
+    const r = indexedDB.open('tab-to-play');
+    r.onsuccess = () => {
+      const q = r.result.transaction('songs').objectStore('songs').getAll();
+      q.onsuccess = () => { r.result.close(); res(q.result.some((x) => x.s?.track === 2)); };
+    };
+  }));
   // Yeniden açınca hepsi geri gelir ve çalara uygulanır
   await app.page.reload();
   await app.ready();
