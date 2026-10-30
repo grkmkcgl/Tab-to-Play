@@ -2,10 +2,13 @@
 // __SURUM__ yayınlanırken (tools/build.mjs) yapı numarasıyla değiştirilir. Sayfa, css ve betikler hep
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
-import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, EX_TEMPO, LEVELS, exerciseTex, findExercise } from './egzersiz.js?v=__SURUM__';
+import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
+import { DURATIONS, PLANS, READY_SHARE, dailySteps, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
+import { makeBackup, restoreBackup } from './yedek.js?v=__SURUM__';
+import { TUNINGS, Tuner, nearestString, noteFrom, noteName } from './akort.js?v=__SURUM__';
 
-const VERSION = '0.3.0';
+const VERSION = '0.7.0';
 const BUILD = '__SURUM__';
 window.ttpBuild = BUILD;
 const at = window.alphaTab;
@@ -37,9 +40,22 @@ function loadPrefs() {
     exCountIn: true,
     exInst: null,
     exLevel: 'baslangic',
+    exOlcu: false,
+    // Çalışma planı: seçili aşama (0–2), enstrümana göre (gitarınki eski adıyla)
+    planStage: 0,
+    planStageDavul: 0,
+    planMin: 30, // günlük süre (15 | 30 | 45 dk)
+    // Tema: acik | koyu | gece (nota alanı da koyu). Boşsa eski "siyah arka plan" (dark) tercihinden.
+    theme: null,
+    dark: false,
+    // Son yedeğin alındığı an (Ayarlar'da hatırlatmak için)
+    lastBackup: 0,
+    libList: '', // kütüphanede seçili çalma listesi ('' = tüm şarkılar)
     // Tek başına metronom
     mBpm: 80,
     mBeats: 4,
+    mMeter: 'duz', // duz | aksak
+    mGroups: '2+2+3', // aksakta seçili gruplama
     mSub: 1,
     mAccent: true,
     mVol: 80,
@@ -193,16 +209,18 @@ async function checkInbox() {
 }
 
 // ---------------------------------------------------------------- görünümler
-const VIEWS = ['libView', 'exView', 'metroView', 'playerView'];
+const VIEWS = ['libView', 'exView', 'planView', 'histView', 'guideView', 'tunerView', 'metroView', 'playerView'];
 // Başka bir görünüme geçerken çalanı durdur
 function showView(id) {
   if (id !== 'playerView') {
     pause();
+    practiceStop(); // durma olayını beklemeden: açılan ekran az önce çalınanı görsün
     closePanels();
     if (trainer.on) stopTrainer(false);
   }
   if (id !== 'metroView') metro.stop();
-  if (id !== 'playerView' && id !== 'metroView') releaseWake();
+  if (id !== 'tunerView') stopTuner();
+  if (id !== 'playerView' && id !== 'metroView' && id !== 'tunerView') releaseWake();
   for (const v of VIEWS) $(`#${v}`).hidden = v !== id;
 }
 
@@ -214,23 +232,76 @@ async function showLibrary() {
   showView('libView');
   document.title = 'Tab-to-Play';
   songs = await db.allSongs();
+  try { lists = (await db.allLists()).sort((a, b) => a.name.localeCompare(b.name, 'tr')); } catch { lists = []; }
   renderList();
+}
+
+// ---------------------------------------------------------------- çalma listeleri
+// { id, name, songs: [şarkı kimlikleri, sırayla], updated }. Seçili listede şarkılar listenin
+// sırasıyla, numaralı ve ↑/↓ ile; listeden açılan şarkıda çalarda "Sonraki" çubuğu.
+let lists = [];
+let playFrom = null; // { id } : çalardaki şarkı bu listeden açıldı
+const activeList = () => lists.find((l) => l.id === prefs.libList) || null;
+
+// Çalarda liste çubuğu: liste adı, sıra, sonraki şarkı
+function updatePlayList() {
+  const L = playFrom && !cur?.ex ? lists.find((l) => l.id === playFrom.id) : null;
+  const i = L ? L.songs.indexOf(cur.id) : -1;
+  $('#playList').hidden = i < 0;
+  if (i < 0) return;
+  const next = songs.find((s) => s.id === L.songs[i + 1]);
+  $('#playListInfo').textContent = `${i + 1}/${L.songs.length} · ${L.name}`; // sıra başta: uzun ad kesilse de görünsün
+  $('#playNext').textContent = next ? `Sonraki: ${next.title} ›` : 'Listenin sonu';
+  $('#playNext').disabled = !next;
+  $('#playNext').dataset.id = next?.id || '';
+}
+$('#playNext').addEventListener('click', () => {
+  const id = $('#playNext').dataset.id;
+  if (id) location.hash = `#/sarki/${id}`;
+});
+async function saveList(l) {
+  l.updated = Date.now();
+  await db.putList(l);
+}
+function renderListBar() {
+  const act = activeList();
+  $('#listBar').replaceChildren(
+    el('button', { class: 'chip', type: 'button', 'data-list': '', 'aria-pressed': String(!act), text: 'Tüm şarkılar' }),
+    ...lists.map((l) => el('button', { class: 'chip', type: 'button', 'data-list': l.id, 'aria-pressed': String(act === l) },
+      el('span', { text: l.name }), el('small', { text: ` · ${l.songs.length}` }))),
+    el('button', { class: 'chip', type: 'button', id: 'listNew', text: '＋ Yeni liste' }));
+  $('#listHead').hidden = !act;
+  if (act) $('#listInfo').textContent = `${act.name} · ${act.songs.length} şarkı`;
 }
 
 function renderList() {
   const q = norm($('#q').value.trim());
-  let list = songs.filter((s) => (!favOnly || s.fav) && (!q || norm(`${s.title} ${s.artist} ${s.file}`).includes(q)));
-  const sort = prefs.sort;
-  if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title, 'tr'));
-  else if (sort === 'added') list.sort((a, b) => b.added - a.added);
-  else list.sort((a, b) => (b.opened || b.added) - (a.opened || a.added));
-  $('#songList').replaceChildren(...list.map(songItem));
+  const act = activeList();
+  const match = (s) => (!favOnly || s.fav) && (!q || norm(`${s.title} ${s.artist} ${s.file}`).includes(q));
+  let list;
+  if (act) {
+    // Listede: listenin sırası (sıralama seçimi uygulanmaz)
+    const byId = new Map(songs.map((s) => [s.id, s]));
+    list = act.songs.map((id) => byId.get(id)).filter((s) => s && match(s));
+  } else {
+    list = songs.filter(match);
+    const sort = prefs.sort;
+    if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title, 'tr'));
+    else if (sort === 'added') list.sort((a, b) => b.added - a.added);
+    else list.sort((a, b) => (b.opened || b.added) - (a.opened || a.added));
+  }
+  $('#sort').disabled = !!act;
+  renderListBar();
+  $('#songList').replaceChildren(...list.map((s) => songItem(s, act)));
   $('#welcome').hidden = songs.length > 0;
   $('#libTools').hidden = songs.length === 0;
   $('#noResult').hidden = !(songs.length > 0 && list.length === 0);
+  $('#noResult').textContent = act && !act.songs.length
+    ? 'Bu liste boş. Bir şarkının ⋮ menüsünden “Listeye ekle”ye dokun.'
+    : 'Aramana uyan şarkı yok.';
 }
 
-function songItem(s) {
+function songItem(s, inList = null) {
   const counts = {};
   for (const t of s.tracks) counts[t.kind] = (counts[t.kind] || 0) + 1;
   const kinds = el('span', { class: 'kinds' }, ...Object.entries(counts).map(([k, n]) =>
@@ -238,11 +309,21 @@ function songItem(s) {
   const sub = el('span', { class: 'song-sub' });
   if (s.artist) sub.append(el('span', { text: s.artist }));
   sub.append(kinds);
+  const idx = inList ? inList.songs.indexOf(s.id) : -1;
+  const title = el('span', { class: 'song-title' });
+  if (inList) title.append(el('span', { class: 'order', text: `${idx + 1}.` }));
+  title.append(s.title);
   return el('li', { class: 'song', 'data-id': s.id },
-    el('button', { class: 'song-main', type: 'button', 'data-act': 'open' }, el('span', { class: 'song-title', text: s.title }), sub),
+    el('button', { class: 'song-main', type: 'button', 'data-act': 'open' }, title, sub),
     el('button', { class: 'icon-btn fav', type: 'button', 'data-act': 'fav', 'aria-pressed': String(!!s.fav), 'aria-label': 'Favori' }, icon('star')),
     el('button', { class: 'icon-btn', type: 'button', 'data-act': 'more', 'aria-label': 'Diğer işlemler', 'aria-expanded': 'false' }, icon('more')),
     el('div', { class: 'song-actions', hidden: true },
+      ...(inList ? [
+        el('button', { class: 'btn', type: 'button', 'data-act': 'up', text: '↑ Yukarı', disabled: idx === 0 }),
+        el('button', { class: 'btn', type: 'button', 'data-act': 'down', text: '↓ Aşağı', disabled: idx === inList.songs.length - 1 }),
+        el('button', { class: 'btn', type: 'button', 'data-act': 'unlist', text: 'Listeden çıkar' }),
+      ] : []),
+      el('button', { class: 'btn', type: 'button', 'data-act': 'lists', text: 'Listeye ekle' }),
       el('button', { class: 'btn', type: 'button', 'data-act': 'share', text: 'Paylaş' }),
       el('button', { class: 'btn danger', type: 'button', 'data-act': 'del', text: 'Sil' })));
 }
@@ -271,7 +352,24 @@ $('#songList').addEventListener('click', async (e) => {
   const s = songs.find((x) => x.id === li.dataset.id);
   if (!s) return;
   const act = btn.dataset.act;
-  if (act === 'open') location.hash = `#/sarki/${s.id}`;
+  const L = activeList();
+  if (act === 'open') {
+    playFrom = L ? { id: L.id } : null; // listeden açıldıysa çalarda "Sonraki"
+    location.hash = `#/sarki/${s.id}`;
+  } else if (act === 'up' || act === 'down') {
+    const i = L.songs.indexOf(s.id);
+    const j = i + (act === 'up' ? -1 : 1);
+    if (j < 0 || j >= L.songs.length) return;
+    [L.songs[i], L.songs[j]] = [L.songs[j], L.songs[i]];
+    await saveList(L);
+    renderList();
+    $(`#songList [data-id="${s.id}"] [data-act="more"]`)?.click(); // işlemler açık kalsın
+  } else if (act === 'unlist') {
+    L.songs = L.songs.filter((x) => x !== s.id);
+    await saveList(L);
+    renderList();
+    toast(`“${L.name}” listesinden çıkarıldı`);
+  } else if (act === 'lists') openListDlg(s);
   else if (act === 'fav') {
     s.fav = !s.fav;
     btn.setAttribute('aria-pressed', String(s.fav));
@@ -286,11 +384,97 @@ $('#songList').addEventListener('click', async (e) => {
     if (!confirm(`“${s.title}” kütüphaneden silinsin mi?`)) return;
     await db.deleteSong(s.id);
     songs = songs.filter((x) => x.id !== s.id);
+    for (const l of lists.filter((x) => x.songs.includes(s.id))) {
+      l.songs = l.songs.filter((x) => x !== s.id);
+      await saveList(l);
+    }
     renderList();
     toast('Şarkı silindi');
   }
 });
 $('#q').addEventListener('input', renderList);
+
+// Liste seçimi, yeni liste, adını değiştir, sil
+async function newList(name) {
+  const l = { id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: name.trim(), songs: [] };
+  await saveList(l);
+  lists.push(l);
+  lists.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  return l;
+}
+$('#listBar').addEventListener('click', async (e) => {
+  if (e.target.closest('#listNew')) {
+    const name = prompt('Yeni listenin adı (ör. Prova, Konser):');
+    if (!name?.trim()) return;
+    const l = await newList(name);
+    prefs.libList = l.id;
+    savePrefs();
+    renderList();
+    toast('Liste oluşturuldu', 2000);
+    return;
+  }
+  const id = e.target.closest('[data-list]')?.dataset.list;
+  if (id == null) return;
+  prefs.libList = id;
+  savePrefs();
+  renderList();
+});
+$('#listRename').addEventListener('click', async () => {
+  const L = activeList();
+  const name = L && prompt('Listenin yeni adı:', L.name);
+  if (!name?.trim()) return;
+  L.name = name.trim();
+  await saveList(L);
+  lists.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  renderList();
+});
+$('#listDelete').addEventListener('click', async () => {
+  const L = activeList();
+  if (!L || !confirm(`“${L.name}” listesi silinsin mi? Şarkılar kütüphanede kalır.`)) return;
+  await db.deleteList(L.id);
+  lists = lists.filter((x) => x !== L);
+  prefs.libList = '';
+  savePrefs();
+  renderList();
+  toast('Liste silindi');
+});
+
+// Listeye ekle penceresi: her liste için işaret kutusu, işaretleyince eklenir/çıkarılır
+let listDlgSong = null;
+function renderListDlg() {
+  const s = listDlgSong;
+  $('#listDlgSong').textContent = s.title;
+  $('#listChecks').replaceChildren(...lists.map((l) => el('li', {},
+    el('label', { class: 'switch' },
+      el('input', { type: 'checkbox', 'data-list': l.id, checked: l.songs.includes(s.id) }),
+      el('span', { text: `${l.name} · ${l.songs.length}` })))));
+  if (!lists.length) $('#listChecks').append(el('li', { class: 'muted small', text: 'Henüz liste yok; aşağıdan bir tane oluştur.' }));
+}
+function openListDlg(s) {
+  listDlgSong = s;
+  $('#newListName').value = '';
+  renderListDlg();
+  $('#listDlg').showModal();
+}
+$('#listChecks').addEventListener('change', async (e) => {
+  const l = lists.find((x) => x.id === e.target.dataset.list);
+  if (!l) return;
+  l.songs = e.target.checked ? [...l.songs.filter((x) => x !== listDlgSong.id), listDlgSong.id] : l.songs.filter((x) => x !== listDlgSong.id);
+  await saveList(l);
+  renderListDlg();
+  renderList();
+});
+$('#newListAdd').addEventListener('click', async () => {
+  const name = $('#newListName').value;
+  if (!name.trim()) { $('#newListName').focus(); return; }
+  const l = await newList(name);
+  l.songs.push(listDlgSong.id);
+  await saveList(l);
+  $('#newListName').value = '';
+  renderListDlg();
+  renderList();
+});
+$('#listDlg [data-close-dlg]').addEventListener('click', () => $('#listDlg').close());
 $('#sort').value = prefs.sort;
 $('#sort').addEventListener('change', () => { prefs.sort = $('#sort').value; savePrefs(); renderList(); });
 $('#favOnly').addEventListener('click', () => {
@@ -404,13 +588,14 @@ function saveSong(later = false) {
   if (later) saveTimer = setTimeout(flushSave, 250);
   else flushSave();
 }
+const exRecord = (song) => ({ id: song.id, s: song.s, opened: song.opened, played: song.played, done: song.done, best: song.best });
 function flushSave() {
   clearTimeout(saveTimer);
   const song = pendingSave;
   pendingSave = null;
   if (!song) return;
   // Egzersizin kendisi kodda; yalnızca ilerlemesi (tempo, döngü, antrenör…) saklanır
-  const put = song.ex ? db.putEx({ id: song.id, s: song.s, opened: song.opened }) : db.putSong(song);
+  const put = song.ex ? db.putEx(exRecord(song)) : db.putSong(song);
   put.catch((e) => console.warn('Kaydedilemedi', e));
 }
 addEventListener('pagehide', flushSave);
@@ -428,8 +613,32 @@ function staveFor(info) {
   return { tab: at.StaveProfile.Tab, nota: at.StaveProfile.Score, ikisi: at.StaveProfile.ScoreTab }[prefs.stave] ?? at.StaveProfile.Tab;
 }
 
+// Tema. Gecede nota da koyu zeminde: alphaTab notayı CSS ile değil kendi renkleriyle çizer, renkler
+// burada (saf beyaz değil, kırık beyaz; çizgiler yumuşak). Açık ve koyu temada nota kağıdı açık,
+// alphaTab'ın kendi renkleri.
+const THEME_BAR = { acik: '#f7f2eb', koyu: '#1c1814', gece: '#1c1814' };
+if (!THEME_BAR[prefs.theme]) prefs.theme = prefs.dark ? 'gece' : 'koyu';
+const SHEET_LIGHT = new at.Settings().display.resources;
+const SHEET_GECE = {
+  staffLineColor: [119, 111, 102], barSeparatorColor: [149, 140, 130], barNumberColor: [242, 154, 107],
+  mainGlyphColor: [228, 221, 211], secondaryGlyphColor: [163, 154, 144], scoreInfoColor: [228, 221, 211],
+};
+function applySheetColors(res) {
+  for (const [k, rgb] of Object.entries(SHEET_GECE)) res[k] = prefs.theme === 'gece' ? new at.model.Color(...rgb, 255) : SHEET_LIGHT[k];
+}
+
+function applyTheme() {
+  const root = document.documentElement;
+  root.classList.toggle('gece', prefs.theme === 'gece');
+  root.classList.toggle('acik', prefs.theme === 'acik');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BAR[prefs.theme]);
+  $$('[data-theme-seg] button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === prefs.theme)));
+}
+applyTheme();
+
 function applyDisplay() {
   const st = api.settings;
+  applySheetColors(st.display.resources);
   st.display.staveProfile = staveFor(cur?.tracks[shown]);
   // Yalnızca tab gösterilirken ritim (sap ve kirişler) tabın altına çizilsin
   st.notation.rhythmMode = st.display.staveProfile === at.StaveProfile.Tab ? at.TabRhythmMode.ShowWithBars : at.TabRhythmMode.Automatic;
@@ -470,6 +679,7 @@ function ensureApi() {
 
   api.scoreLoaded.on((sc) => {
     score = sc;
+    buildSections();
     buildMix();
     updateAll();
   });
@@ -490,6 +700,7 @@ function ensureApi() {
     playing = e.state === at.synth.PlayerState.Playing;
     updatePlayButton();
     if (playing) requestWake(); else releaseWake();
+    if (playing) practiceStart(); else practiceStop();
   });
   api.playerPositionChanged.on(onPosition);
   api.playedBeatChanged.on((beat) => {
@@ -498,6 +709,7 @@ function ensureApi() {
   });
   api.playbackRangeChanged.on((e) => onRangeChanged(e.playbackRange));
   api.beatMouseDown.on((beat) => {
+    seekTo = null; // notaya dokunuş bekleyen ok tuşu atamasından yeni
     lastTap = { tick: api.tickCache?.getBeatStart(beat) ?? null, bar: beat.voice.bar.index, at: Date.now() };
   });
   api.beatMouseUp.on(onBeatTap);
@@ -547,21 +759,26 @@ async function openExercise(id) {
     id,
     ex,
     title: ex.title,
-    artist: `${EX_INST[ex.inst]} · ${LEVELS[ex.level]}`,
+    artist: `${EX_INST[ex.inst]} · ${ex.level === 'olcu' ? `${tsLabel(ex)} · ${LEVELS[ex.diff]}` : LEVELS[ex.level]}`,
     file: '',
-    tempo: EX_TEMPO,
+    tempo: exTempo(ex),
     tracks: sc.tracks.map(trackInfo),
     s: saved?.s || {
       speed: ex.bpm,
       loop: { on: true, from: 0, to: sc.masterBars.length - 1 },
       tr: { start: ex.bpm, target: ex.max, step: 5, every: 2 },
     },
+    // Gerçekten çalındığı son an, o gün yeterince çalışıldığı son an, en yüksek çalınan tempo
+    played: saved?.played,
+    done: saved?.done,
+    best: saved?.best,
   };
   showPlayer(rec, sc);
 }
 
 // Şarkıyı ya da egzersizi çalarda aç
 function showPlayer(song, sc) {
+  practiceStop(); // çalan süre önceki şarkıya yazılsın
   flushSave(); // önceki şarkının bekleyen kaydı kaybolmasın
   clearTimeout(pauseTimer);
   if (api) api.stop();
@@ -575,6 +792,7 @@ function showPlayer(song, sc) {
   $('#playerView').classList.toggle('ex', !!song.ex);
   $('#pTitle').textContent = song.title;
   $('#pArtist').textContent = song.artist || stripExt(song.file || '');
+  updatePlayList();
   document.title = `${song.title} · Tab-to-Play`;
   renderPresets();
 
@@ -647,10 +865,17 @@ function togglePlay() {
   else play();
 }
 
+// Ok tuşu ya da pedal art arda basılınca önceki atamanın konum olayı sonradan gelebiliyor (yavaş
+// cihazda) ve ölçüyü geri çekiyordu; bir sonraki basış da yanlış ölçüden devam edip kayboluyordu.
+// En son istenen konumdan sonraki 1,5 sn boyunca başka konumlara ait atama olayları ölçüyü
+// değiştirmez (olaylar sırasız da gelebilir; eşleşen geldi diye bırakılmaz). Notaya dokunuş ve
+// konum çubuğu bırakır.
+let seekTo = null; // { tick, at }
 function onPosition(e) {
   endTime = e.endTime;
   if (!seeking) $('#seek').value = e.endTime ? Math.round((e.currentTime / e.endTime) * 1000) : 0;
   $('#posTime').textContent = `${fmtTime(e.currentTime)} / ${fmtTime(e.endTime)}`;
+  if (e.isSeek && seekTo && performance.now() - seekTo.at < 1500 && Math.abs(e.currentTick - seekTo.tick) > 10) return; // eski atama
   if (e.isSeek && api?.tickCache && score) {
     const r = api.tickCache.findBeat(new Set([shown]), e.currentTick);
     if (r?.beat) { curBar = r.beat.voice.bar.index; updateBarLabel(); }
@@ -659,12 +884,50 @@ function onPosition(e) {
 
 function updateBarLabel() {
   $('#posBar').textContent = score ? `Ölçü ${curBar + 1}/${score.masterBars.length}` : 'Ölçü –';
+  $('#posSec').textContent = (score && sectionAt(curBar)?.name) || '';
 }
+
+// ---------------------------------------------------------------- bölümler
+// Dosyadaki bölüm işaretleri (Intro, Nakarat…): döngü panelinde liste; bölüme git ya da bölümü
+// döngüye al. Ölçü yazısının altında o anki bölüm. Bir bölüm, sonraki bölümün başına kadar sürer.
+let sections = [];
+function buildSections() {
+  sections = [];
+  const bars = score?.masterBars || [];
+  bars.forEach((m, i) => {
+    if (m.section) sections.push({ name: (m.section.text || m.section.marker || '').trim() || `Bölüm ${sections.length + 1}`, from: i });
+  });
+  sections.forEach((s, k) => { s.to = (sections[k + 1]?.from ?? bars.length) - 1; });
+  $('#secBox').hidden = !sections.length;
+  // Tek satır, yana kayar (bölüm çok olsa da panel uzamaz): ⟳ ad · aralık = döngüye al, Git = oraya git
+  $('#secList').replaceChildren(...sections.map((s, k) => el('li', { class: 'sec-item' },
+    el('button', { class: 'sec-loop', type: 'button', 'data-sec-loop': k, 'aria-label': `${s.name} bölümünü döngüye al`, 'aria-pressed': 'false' },
+      icon('loop'), el('span', { class: 'sec-name' }, el('b', { text: s.name }), el('small', { text: ` · ${s.from + 1}–${s.to + 1}` }))),
+    el('button', { class: 'sec-go', type: 'button', 'data-sec-go': k, text: 'Git', 'aria-label': `${s.name} bölümüne git` }))));
+}
+const sectionAt = (bar) => sections.findLast((s) => s.from <= bar);
+$('#secList').addEventListener('click', (e) => {
+  const go = e.target.closest('[data-sec-go]')?.dataset.secGo;
+  const lp = e.target.closest('[data-sec-loop]')?.dataset.secLoop;
+  const s = sections[go ?? lp];
+  if (!s) return;
+  if (go != null) {
+    // Döngü açıksa ve bölüm döngünün dışındaysa döngü bölüme kayar (yoksa imleç başa döner)
+    if (cur.s.loop.on && (s.from < cur.s.loop.from || s.from > cur.s.loop.to)) setLoop({ from: s.from, to: s.to });
+    goBar(s.from);
+  } else {
+    setLoop({ from: s.from, to: s.to, on: true });
+    toast(`“${s.name}” döngüde (${s.from + 1}–${s.to + 1})`);
+  }
+  closePanels();
+});
 
 function goBar(i) {
   if (!score || !api?.tickCache) return;
   const idx = clamp(i, 0, score.masterBars.length - 1);
-  api.tickPosition = api.tickCache.getMasterBarStart(score.masterBars[idx]);
+  const tick = api.tickCache.getMasterBarStart(score.masterBars[idx]);
+  api.tickPosition = tick;
+  seekTo = { tick, at: performance.now() };
   curBar = idx;
   updateBarLabel();
 }
@@ -950,6 +1213,10 @@ function updateLoopUi() {
   $('#lfOut').textContent = L.from + 1;
   $('#ltOut').textContent = L.to + 1;
   $('#lblLoop').textContent = L.on ? `${L.from + 1}–${L.to + 1}` : 'Döngü';
+  $$('[data-sec-loop]').forEach((b) => {
+    const s = sections[b.dataset.secLoop];
+    b.setAttribute('aria-pressed', String(!!s && L.on && L.from === s.from && L.to === s.to));
+  });
   $('#loopTapHint').textContent = loopTapStart == null
     ? 'Notalarda önce başlangıç, sonra bitiş ölçüsüne dokun.'
     : `Başlangıç ${loopTapStart + 1}. ölçü seçildi. Şimdi bitiş ölçüsüne dokun.`;
@@ -1111,6 +1378,15 @@ $('#p-view').addEventListener('click', (e) => {
   updateViewUi();
   rerender();
 });
+$$('[data-theme-seg]').forEach((seg) => seg.addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.theme = v;
+  prefs.dark = v === 'gece'; // aynı adresteki eski sürüm (önizleme) de koyu notayı göstersin
+  savePrefs();
+  applyTheme();
+  rerender();
+}));
 $('#follow').addEventListener('change', (e) => {
   prefs.follow = e.target.checked;
   savePrefs();
@@ -1125,6 +1401,7 @@ $('#wake').addEventListener('change', (e) => {
 // ---------------------------------------------------------------- paneller ve kontroller
 function closePanels() {
   $$('.panel').forEach((p) => { p.hidden = true; });
+  $('#sheet').style.paddingBottom = '';
   if (loopTapStart != null) { loopTapStart = null; if (cur) updateLoopUi(); }
   $$('[data-panel]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
 }
@@ -1134,6 +1411,10 @@ function togglePanel(name) {
   closePanels();
   if (!open) return;
   p.hidden = false;
+  p.scrollTop = 0; // her açılışta baştan (bölüm listesi, açıklama üstte)
+  // Panel notaların altını örter: son ölçüler de panelin üstüne kaydırılabilsin (döngü panelinde
+  // notalara dokunarak seçiliyor)
+  $('#sheet').style.paddingBottom = `${Math.max(innerHeight * 0.4, p.getBoundingClientRect().height + 60)}px`;
   $$(`[data-panel="${name}"]`).forEach((b) => b.setAttribute('aria-expanded', 'true'));
 }
 $$('[data-panel]').forEach((b) => b.addEventListener('click', () => togglePanel(b.dataset.panel)));
@@ -1151,8 +1432,16 @@ function updateAll() {
 $('#btnPlay').addEventListener('click', togglePlay);
 $('#btnStart').addEventListener('click', () => {
   if (!api) return;
-  if (cur?.s.loop.on && api.playbackRange) api.tickPosition = api.playbackRange.startTick;
-  else { stop(); curBar = 0; updateBarLabel(); }
+  if (cur?.s.loop.on && api.playbackRange) {
+    api.tickPosition = api.playbackRange.startTick;
+    seekTo = { tick: api.playbackRange.startTick, at: performance.now() };
+  }
+  else {
+    stop();
+    curBar = 0;
+    seekTo = { tick: 0, at: performance.now() };
+    updateBarLabel();
+  }
 });
 // Listeden açıldıysa geri düğmesi tarayıcı geçmişini kullanır (Android geri tuşuyla aynı davranır).
 // Şarkı kütüphaneye, egzersiz egzersiz listesine döner.
@@ -1168,6 +1457,7 @@ seek.addEventListener('input', () => {
   if (endTime) $('#posTime').textContent = `${fmtTime((seek.value / 1000) * endTime)} / ${fmtTime(endTime)}`;
 });
 seek.addEventListener('change', () => {
+  seekTo = null;
   if (api && endTime) api.timePosition = (seek.value / 1000) * endTime;
   seeking = false;
 });
@@ -1205,8 +1495,67 @@ function releaseWake() {
   wakeLock = null;
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && (playing || metro.running)) requestWake();
+  if (!document.hidden && (playing || metro.running || tuner.running)) requestWake();
 });
+
+// ---------------------------------------------------------------- çalışma süresi
+// Gerçek çalma süresi (sayma dahil): çalar çalarken geçen zaman. Her 15 sn'de ve durunca günün
+// kaydına eklenir (db.addPractice). Egzersizde: çalınınca `played` (listede "Son: … BPM" ancak o
+// zaman görünür), o gün en az PRACTICED_SEC çalınınca `done` (plandaki ✓ ve öneri sırası), en az
+// BPM_SEC aynı tempoda çalınınca `best` (hedef tempoya ulaşıldı mı).
+const PRACTICED_SEC = 20;
+const BPM_SEC = 8;
+let playClock = 0; // çalmanın başladığı ya da son yazıldığı an (performance.now); 0 = durmuş
+let practiceTimer = 0;
+// Yazmalar sırayla; listeler okumadan önce bekler (yoksa az önce çalınan görünmeyebilir)
+let practiceQueue = Promise.resolve();
+const pad2 = (n) => String(n).padStart(2, '0');
+const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+
+function practiceStart() {
+  if (playClock) return;
+  playClock = performance.now();
+  practiceTimer = setInterval(practiceTick, 15000);
+}
+function practiceStop() {
+  practiceTick();
+  playClock = 0;
+  clearInterval(practiceTimer);
+}
+function practiceTick() {
+  if (!playClock || !cur) return;
+  const now = performance.now();
+  // Cihaz uyuyup uyanınca aradaki süre sayılmasın (yazma aralığı 15 sn)
+  const sec = Math.min(30, (now - playClock) / 1000);
+  playClock = now;
+  const song = cur;
+  practiceQueue = practiceQueue.then(() => addPractice(song, sec));
+}
+
+async function addPractice(song, sec) {
+  if (!song || sec < 0.5 || song.ex?.guide) return; // rehber çalışma sayılmaz
+  const ex = song.ex;
+  const bpm = Math.round(ex ? song.s.speed : ((song.tempo || 0) * song.s.speed) / 100);
+  const steady = sec >= BPM_SEC && bpm > 0;
+  let item;
+  try {
+    item = await db.addPractice(dayKey(), song.id, {
+      sec, bpm: steady ? bpm : 0, title: song.title, kind: ex ? 'ex' : 'song', inst: ex?.inst,
+    });
+  } catch (e) {
+    console.warn('Çalışma süresi kaydedilemedi', e);
+    return;
+  }
+  if (!ex) return;
+  song.played = Date.now();
+  if (steady) song.best = Math.max(song.best || 0, bpm);
+  if (item.sec >= PRACTICED_SEC) song.done = Date.now();
+  await db.putEx(exRecord(song)).catch((e) => console.warn('Kaydedilemedi', e));
+}
+// Testler için: açık şarkı ya da egzersiz o kadar süre çalınmış gibi
+window.ttpPractice = (sec) => { const song = cur; practiceQueue = practiceQueue.then(() => addPractice(song, sec)); return practiceQueue; };
+document.addEventListener('visibilitychange', () => { if (document.hidden) practiceTick(); });
+addEventListener('pagehide', practiceTick);
 
 // ---------------------------------------------------------------- egzersizler
 const exInst = () => prefs.exInst || (prefs.instrument === 'davul' ? 'davul' : 'gitar');
@@ -1216,30 +1565,57 @@ async function showExercises() {
   showView('exView');
   document.title = 'Egzersizler · Tab-to-Play';
   renderExList();
+  await practiceQueue;
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
   renderExList();
 }
 
 function renderExList() {
   const inst = exInst();
-  const level = prefs.exLevel;
+  // Ölçüler sekmesi ayrı tercihte (exOlcu): exLevel hep eski üç seviyeden biri kalır, Ölçüler'i
+  // bilmeyen eski sürüm (aynı adresteki önizleme ya da önbellekteki eski sayfa) boş liste göstermez.
+  const level = prefs.exOlcu ? 'olcu' : (LEVELS[prefs.exLevel] ? prefs.exLevel : 'baslangic');
   $$('#segExInst button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === inst)));
   $$('#segExLevel button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === level)));
   const list = EXERCISES.filter((x) => x.inst === inst && x.level === level);
-  $('#exList').replaceChildren(...list.map((x) => {
-    const last = exProgress.get(x.id)?.s?.speed;
-    const meta = el('span', { class: 'ex-meta' }, el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
-    if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
-    const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
-      el('span', { class: 'ex-title', text: x.title }),
-      el('span', { class: 'ex-desc-l', text: x.desc }),
-      meta);
-    if (last) {
-      const pct = clamp(Math.round(((last - x.min) / (x.max - x.min)) * 100), 0, 100);
-      main.append(el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%` })));
+  $('#exList').replaceChildren(...list.map((x) => exRow(x)));
+  // Kartlar seçili enstrümana göre: akort aleti yalnızca gitarda, rehber o enstrümanın
+  $('#btnTuner').hidden = inst !== 'gitar';
+  $('#guideCardSub').textContent = inst === 'davul'
+    ? 'Davul notası: hangi çizgi hangi davul, nota başları, vurgu, ghost, flam.'
+    : 'Tab işaretleri: teller, perdeler, çekiç, bend, palm mute… ne anlama gelir.';
+}
+
+// Egzersiz satırı; planda hedef tempo ve bugün çalışıldıysa ✓
+const exTarget = (x) => Math.round((x.bpm + x.max) / 2 / 5) * 5;
+function exRow(x, { plan = false } = {}) {
+  const rec = exProgress.get(x.id);
+  // Yalnızca açıp çıkmak "son tempo" sayılmaz; gerçekten çalınmış olmalı
+  const last = rec?.played ? rec.s?.speed : null;
+  const meta = el('span', { class: 'ex-meta' });
+  const ts = tsLabel(x);
+  if (ts) meta.append(el('span', { class: 'ts', text: ts }));
+  if (x.diff) meta.append(el('span', { class: 'diff', text: LEVELS[x.diff] }));
+  meta.append(el('span', { text: `Önerilen ${x.min}–${x.max} BPM` }));
+  if (last) meta.append(el('span', { class: 'last', text: `Son: ${last} BPM` }));
+  const main = el('button', { class: 'ex-main', type: 'button', 'data-id': x.id },
+    el('span', { class: 'ex-title', text: x.title }),
+    el('span', { class: 'ex-desc-l', text: x.desc }),
+    meta);
+  if (last) {
+    const pct = clamp(Math.round(((last - x.min) / (x.max - x.min)) * 100), 0, 100);
+    main.append(el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${pct}%` })));
+  }
+  if (plan) {
+    const t = exTarget(x);
+    const ok = (rec?.best || 0) >= t; // hedef tempoda en az birkaç saniye çalındı
+    meta.append(el('span', { class: ok ? 'last' : '', text: ok ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
+    // ✓ ekran okuyucuda "onay işareti" diye okunmasın: görünmez metinle anlatılır
+    if (isToday(rec?.done)) {
+      main.querySelector('.ex-title').append(el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }), el('span', { class: 'sr-only', text: ' (bugün çalışıldı)' }));
     }
-    return el('li', { class: 'ex-item' }, main);
-  }));
+  }
+  return el('li', { class: 'ex-item' }, main);
 }
 
 $('#btnEx').addEventListener('click', () => { location.hash = '#/egzersiz'; });
@@ -1257,7 +1633,8 @@ $('#segExInst').addEventListener('click', (e) => {
 $('#segExLevel').addEventListener('click', (e) => {
   const v = e.target.closest('button')?.dataset.v;
   if (!v) return;
-  prefs.exLevel = v;
+  prefs.exOlcu = v === 'olcu';
+  if (v !== 'olcu') prefs.exLevel = v;
   savePrefs();
   renderExList();
 });
@@ -1266,11 +1643,419 @@ $('#exList').addEventListener('click', (e) => {
   if (id) location.hash = `#/egzersiz/${id}`;
 });
 
+// ---------------------------------------------------------------- çalışma planı
+// Egzersiz listesinde seçili enstrümanın planı; seçili aşama her enstrüman için ayrı
+const stageKey = (inst) => (inst === 'davul' ? 'planStageDavul' : 'planStage');
+async function showPlan() {
+  showView('planView');
+  const title = `${KIND_LABEL[exInst()]} çalışma planı`;
+  $('#planTitle').textContent = title;
+  document.title = `${title} · Tab-to-Play`;
+  renderPlan();
+  await practiceQueue;
+  try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
+  try { songs = await db.allSongs(); } catch { /* öneri olmadan da plan çalışır */ }
+  renderPlan();
+}
+
+// Şarkı adımı için öneri: o enstrümanın partisi olan, en uzun süredir açılmayan şarkılar
+function planSongs(inst, n = 2) {
+  return songs.filter((s) => s.tracks?.some((t) => t.kind === inst))
+    .sort((a, b) => (a.opened || 0) - (b.opened || 0))
+    .slice(0, n);
+}
+
+function renderPlan() {
+  const inst = exInst();
+  const plan = PLANS[inst];
+  const k = clamp(Math.round(prefs[stageKey(inst)]) || 0, 0, plan.stages.length - 1);
+  const st = plan.stages[k];
+  $$('#segStage button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === k)));
+  const ids = stageIds(plan, st);
+  const reached = ids.filter((id) => (exProgress.get(id)?.best || 0) >= exTarget(findExercise(id))).length;
+  $('#planWhen').textContent = `${st.when} · Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}`;
+  // Aşamanın çoğunda hedefe ulaşıldıysa sonraki aşamayı öner
+  const ready = k < plan.stages.length - 1 && reached >= ids.length * READY_SHARE;
+  $('#planReady').hidden = !ready;
+  if (ready) {
+    $('#planReady').replaceChildren(
+      el('span', { text: `Hedef tempoya ulaştığın egzersiz: ${reached}/${ids.length}. Sonraki aşamaya geçmeye hazırsın.` }),
+      el('button', { class: 'btn primary', type: 'button', 'data-stage': k + 1, text: `${k + 2}. aşamaya geç: ${plan.stages[k + 1].title}` }));
+  }
+
+  const minutes = DURATIONS[prefs.planMin] ? Number(prefs.planMin) : 30;
+  $$('#segPlanMin button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === minutes)));
+  $('#planMinLbl').textContent = `(~${minutes} dk)`;
+  let n = 0;
+  const steps = dailySteps(plan, minutes).map((step) => el('li', { class: 'plan-step' },
+    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. ${step.title}` }), el('span', { class: 'muted', text: ` · ${step.min} dk` })),
+    el('ul', { class: 'ex-list' }, ...pick(st[step.key], step.n, exProgress).map((id) => exRow(findExercise(id), { plan: true })))));
+  const suggest = planSongs(inst);
+  steps.push(el('li', { class: 'plan-step' },
+    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. Şarkı` }), el('span', { class: 'muted', text: ` · ${DURATIONS[minutes].song}+ dk` })),
+    el('p', { class: 'muted small', text: 'Bugün çalıştığın tekniği kütüphanendeki bir şarkıda dene. Zor bölümü döngüye al, hızı düşür, aynı kurallarla yavaş yavaş artır.' }),
+    suggest.length ? el('div', { class: 'plan-songs' }, ...suggest.map((s) => el('button', { class: 'btn', type: 'button', 'data-song': s.id },
+      el('span', { text: `▶ ${s.title}` }), s.artist ? el('small', { class: 'muted', text: ` · ${s.artist}` }) : null))) : null,
+    el('button', { class: 'btn', type: 'button', 'data-go': 'lib', text: 'Kütüphaneye git' })));
+  $('#planToday').replaceChildren(...steps);
+
+  $('#planRules').replaceChildren(...plan.rules.map((r) => el('li', { text: r })));
+  $('#planNext').replaceChildren(...(st.next
+    ? [el('b', { text: 'Sonraki aşamaya ne zaman geçmeli? ' }), st.next]
+    : [el('b', { text: 'Bundan sonra: ' }), 'şarkılarda zorlandığın bölümleri döngüye al ve aynı kurallarla çalış; zorlandığın tekniğin egzersizine geri dön.']));
+  $('#planAll').replaceChildren(...plan.steps.map((step) => el('section', { class: 'plan-group' },
+    el('h3', { text: step.title }),
+    el('ul', { class: 'ex-list' }, ...st[step.key].map((id) => exRow(findExercise(id), { plan: true }))))));
+}
+
+$('#btnPlan').addEventListener('click', () => { location.hash = '#/plan'; });
+$('#planBack').addEventListener('click', () => {
+  if (lastView === 'plan' && cameToPlanFrom === 'exlist') history.back();
+  else location.hash = '#/egzersiz';
+});
+$('#segStage').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (v == null) return;
+  prefs[stageKey(exInst())] = Number(v);
+  savePrefs();
+  renderPlan();
+});
+$('#segPlanMin').addEventListener('click', (e) => {
+  const v = Number(e.target.closest('button')?.dataset.v);
+  if (!DURATIONS[v]) return;
+  prefs.planMin = v;
+  savePrefs();
+  renderPlan();
+});
+$('#planView').addEventListener('click', (e) => {
+  if (e.target.closest('[data-go="lib"]')) { location.hash = '#/'; return; }
+  const song = e.target.closest('[data-song]')?.dataset.song;
+  if (song) { location.hash = `#/sarki/${song}`; return; }
+  const stage = e.target.closest('[data-stage]')?.dataset.stage;
+  if (stage != null) {
+    prefs[stageKey(exInst())] = Number(stage);
+    savePrefs();
+    renderPlan();
+    $('#planView').scrollIntoView?.({ block: 'start' });
+    return;
+  }
+  const id = e.target.closest('[data-id]')?.dataset.id;
+  if (id) location.hash = `#/egzersiz/${id}`;
+});
+
+// ---------------------------------------------------------------- nota okuma rehberi
+// Açıklamalar index.html'de; notalar egzersiz gibi çalarda açılır (r-davul, r-gitar). Ayrı bir
+// enstrüman seçimi yok: Egzersiz ekranında seçili enstrüman, çalardan açılınca çalınan parti.
+let guideInst = null; // çalardan açılınca o partinin rehberi; yoksa egzersiz ekranındaki seçim
+function showGuide() {
+  showView('guideView');
+  const inst = guideInst || exInst();
+  const title = inst === 'davul' ? 'Davul notası rehberi' : 'Tab okuma rehberi';
+  $('#guideTitle').textContent = title;
+  document.title = `${title} · Tab-to-Play`;
+  $$('[data-guide]').forEach((d) => { d.hidden = d.dataset.guide !== inst; });
+}
+$('#guideView').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-open]')?.dataset.open;
+  if (id) location.hash = `#/egzersiz/${id}`;
+});
+$('#btnGuide').addEventListener('click', () => {
+  guideInst = null;
+  location.hash = '#/rehber';
+});
+$('#viewGuide').addEventListener('click', () => {
+  // Çalardaki parti davulsa davul rehberi
+  guideInst = cur?.tracks[shown]?.kind === 'davul' ? 'davul' : cur?.tracks[shown]?.tab ? 'gitar' : null;
+  location.hash = '#/rehber';
+});
+$('#guideBack').addEventListener('click', () => {
+  if (lastView === 'rehber' && cameToGuideFrom) history.back();
+  else location.hash = '#/egzersiz';
+});
+
+// ---------------------------------------------------------------- çalışma geçmişi ekranı
+const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+const WEEKDAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+const keyDate = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
+const dayShort = (key) => { const d = keyDate(key); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+const dayLong = (key) => `${dayShort(key)} ${WEEKDAYS[keyDate(key).getDay()]}`;
+const fmtDur = (sec) => {
+  if (sec < 60) return `${Math.round(sec)} sn`;
+  if (sec < 3600) return `${Math.round(sec / 60)} dk`;
+  const m = Math.round(sec / 60);
+  return `${Math.floor(m / 60)} sa ${m % 60} dk`;
+};
+const daysBack = (n, now = Date.now()) => Array.from({ length: n }, (_, i) => {
+  const d = new Date(now);
+  d.setDate(d.getDate() - (n - 1 - i));
+  return dayKey(d);
+});
+// Seri: art arda en az bir dakika çalışılan günler. Bugün henüz çalışılmadıysa seri dünden sayılır.
+function streak(days, now = Date.now()) {
+  const on = new Set(days.filter((d) => d.sec >= 60).map((d) => d.day));
+  const t = new Date(now);
+  if (!on.has(dayKey(t))) t.setDate(t.getDate() - 1);
+  let n = 0;
+  while (on.has(dayKey(t))) { n++; t.setDate(t.getDate() - 1); }
+  return n;
+}
+
+let histDays = [];
+let histEx = null; // tempo grafiğinde seçili egzersiz
+async function showHistory() {
+  showView('histView');
+  document.title = 'Çalışma geçmişi · Tab-to-Play';
+  await practiceQueue;
+  try { histDays = (await db.allDays()).sort((a, b) => (a.day < b.day ? -1 : 1)); } catch { histDays = []; }
+  renderHistory();
+}
+
+function renderHistory() {
+  const byDay = new Map(histDays.map((d) => [d.day, d]));
+  const week = daysBack(7).reduce((a, k) => a + (byDay.get(k)?.sec || 0), 0);
+  const total = histDays.reduce((a, d) => a + d.sec, 0);
+  const n = streak(histDays);
+  $('#hStreak').textContent = `${n} gün`;
+  // Kutular dar: bir saatten uzunu ondalıklı saat
+  const tile = (sec) => (sec >= 3600 ? `${(sec / 3600).toFixed(1).replace('.', ',')} sa` : fmtDur(sec));
+  $('#hWeek').textContent = tile(week);
+  $('#hTotal').textContent = tile(total);
+  $('#hEmpty').hidden = histDays.length > 0;
+  $('#hBody').hidden = histDays.length === 0;
+  if (!histDays.length) return;
+
+  // Son 14 gün: dakika
+  const keys = daysBack(14);
+  columnChart($('#hDays'), $('#hDaysSel'), keys.map((k) => ({
+    v: (byDay.get(k)?.sec || 0) / 60,
+    x: String(keyDate(k).getDate()),
+    cap: `${dayLong(k)}: ${fmtDur(byDay.get(k)?.sec || 0)}`,
+  })));
+
+  // Tempo gelişimi: en son çalışılan egzersiz önce
+  const last = new Map();
+  // Egzersiz ekranında seçili enstrümanın egzersizleri
+  for (const d of histDays) for (const [id, it] of Object.entries(d.items)) if (it.kind === 'ex' && it.bpm && findExercise(id)?.inst === exInst()) last.set(id, d.day);
+  const exIds = [...last.keys()].sort((a, b) => (last.get(a) < last.get(b) ? 1 : -1));
+  $('#hTempoBox').hidden = !exIds.length;
+  if (exIds.length) {
+    if (!exIds.includes(histEx)) histEx = exIds[0];
+    $('#hEx').replaceChildren(...exIds.map((id) => {
+      const x = findExercise(id);
+      return el('option', { value: id, text: x.title });
+    }));
+    $('#hEx').value = histEx;
+    const x = findExercise(histEx);
+    const pts = histDays.filter((d) => d.items[histEx]?.bpm).slice(-20)
+      .map((d) => ({ v: d.items[histEx].bpm, x: dayShort(d.day), cap: `${dayLong(d.day)}: ${d.items[histEx].bpm} BPM · ${fmtDur(d.items[histEx].sec)}` }));
+    lineChart($('#hTempo'), $('#hTempoSel'), pts, { ref: exTarget(x), refLabel: `Hedef ${exTarget(x)}` });
+  }
+
+  // Günler (grafiklerin tablo karşılığı): en yeni gün önce
+  $('#hList').replaceChildren(...[...histDays].reverse().slice(0, 30).map((d) => el('li', { class: 'hist-day' },
+    el('div', { class: 'hist-day-h' }, el('b', { text: dayLong(d.day) }), el('span', { class: 'muted', text: ` · ${fmtDur(d.sec)}` })),
+    el('ul', {}, ...Object.values(d.items).sort((a, b) => b.sec - a.sec).map((it) => el('li', {},
+      el('span', { text: it.title }),
+      el('span', { class: 'muted', text: ` · ${fmtDur(it.sec)}${it.bpm && it.kind === 'ex' ? ` · ${it.bpm} BPM` : ''}` })))))));
+}
+
+$('#hEx').addEventListener('change', (e) => { histEx = e.target.value; renderHistory(); });
+$('#btnHist').addEventListener('click', () => { location.hash = '#/gecmis'; });
+$('#histBack').addEventListener('click', () => {
+  if (lastView === 'hist' && cameToHistFrom) history.back();
+  else location.hash = '#/egzersiz';
+});
+
+// Küçük SVG grafikler (tek seri, gösterge kutusu yok: başlık neyi gösterdiğini söyler). İnce
+// işaretler, saç teli ızgara; bir işarete dokununca ya da üzerine gelince değeri alttaki satırda
+// yazılır, ekran okuyucu her işaretin etiketini okur. Renkler CSS'ten (temaya uyar).
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}, text = null) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+// Eksen için yuvarlak adım: 1, 2, 5 × 10^k
+function niceStep(range, count = 3) {
+  const raw = range / count;
+  const p = 10 ** Math.floor(Math.log10(raw || 1));
+  return [1, 2, 5, 10].map((m) => m * p).find((x) => x >= raw) || raw;
+}
+const CW = 340;
+const CH = 150;
+const PAD = { l: 34, r: 8, t: 12, b: 22 };
+function chartFrame(box, ticks, y) {
+  const svg = svgEl('svg', { viewBox: `0 0 ${CW} ${CH}`, class: 'chart-svg', role: 'img' });
+  for (const t of ticks) {
+    svg.append(svgEl('line', { class: 'grid', x1: PAD.l, x2: CW - PAD.r, y1: y(t), y2: y(t) }));
+    svg.append(svgEl('text', { class: 'tick', x: PAD.l - 6, y: y(t) + 3.5, 'text-anchor': 'end' }, String(t)));
+  }
+  box.replaceChildren(svg);
+  return svg;
+}
+// Dokunulabilir alan (işaretten büyük): değeri yazar, seçili işareti belirginleştirir
+function hitArea(svg, sel, mark, x, w, cap) {
+  const r = svgEl('rect', { class: 'hit', x, y: 0, width: w, height: CH, tabindex: '0', 'aria-label': cap });
+  r.append(svgEl('title', {}, cap));
+  const on = () => {
+    svg.querySelectorAll('.on').forEach((m) => m.classList.remove('on'));
+    mark?.classList.add('on');
+    sel.textContent = cap;
+  };
+  for (const ev of ['pointerenter', 'click', 'focus']) r.addEventListener(ev, on);
+  svg.append(r);
+}
+
+function columnChart(box, sel, data) {
+  const max = Math.max(...data.map((d) => d.v), 1);
+  const step = niceStep(max);
+  const top = Math.ceil(max / step) * step;
+  const y0 = CH - PAD.b;
+  const y = (v) => y0 - (v / top) * (y0 - PAD.t);
+  const svg = chartFrame(box, Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step), y);
+  const band = (CW - PAD.l - PAD.r) / data.length;
+  const w = Math.min(16, band - 6);
+  data.forEach((d, i) => {
+    const x = PAD.l + i * band + (band - w) / 2;
+    let bar = null;
+    const h = y0 - y(d.v);
+    if (h >= 1) {
+      // Uç yuvarlak (4 px), taban düz
+      const r = Math.min(4, h, w / 2);
+      const t = y0 - h;
+      bar = svgEl('path', { class: 'mark', d: `M${x},${y0}V${t + r}Q${x},${t} ${x + r},${t}H${x + w - r}Q${x + w},${t} ${x + w},${t + r}V${y0}Z` });
+      svg.append(bar);
+    }
+    if (i % 2 === (data.length - 1) % 2) svg.append(svgEl('text', { class: 'tick', x: x + w / 2, y: CH - 6, 'text-anchor': 'middle' }, d.x));
+    hitArea(svg, sel, bar, PAD.l + i * band, band, d.cap);
+  });
+  svg.setAttribute('aria-label', 'Son 14 günde günlük çalışma süresi (dakika)');
+  sel.textContent = data.at(-1).cap;
+}
+
+function lineChart(box, sel, data, { ref, refLabel }) {
+  const vals = [...data.map((d) => d.v), ref];
+  const step = niceStep(Math.max(...vals) - Math.min(...vals) + 10, 3);
+  const lo = Math.floor((Math.min(...vals) - 2) / step) * step;
+  const hi = Math.ceil((Math.max(...vals) + 2) / step) * step;
+  const y = (v) => CH - PAD.b - ((v - lo) / (hi - lo)) * (CH - PAD.b - PAD.t);
+  const ticks = [];
+  for (let t = lo; t <= hi + 1e-9; t += step) ticks.push(t);
+  const svg = chartFrame(box, ticks, y);
+  const span = CW - PAD.l - PAD.r - 16;
+  const x = (i) => PAD.l + 8 + (data.length > 1 ? (i / (data.length - 1)) * span : span / 2);
+  // Hedef: ince referans çizgisi, sağda etiket
+  svg.append(svgEl('line', { class: 'ref', x1: PAD.l, x2: CW - PAD.r, y1: y(ref), y2: y(ref) }));
+  svg.append(svgEl('text', { class: 'tick', x: CW - PAD.r, y: y(ref) - 4, 'text-anchor': 'end' }, refLabel));
+  if (data.length > 1) svg.append(svgEl('path', { class: 'line', d: data.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.v)}`).join('') }));
+  const band = data.length > 1 ? span / (data.length - 1) : span;
+  data.forEach((d, i) => {
+    const dot = svgEl('circle', { class: 'dot', cx: x(i), cy: y(d.v), r: 4 });
+    svg.append(dot);
+    hitArea(svg, sel, dot, x(i) - band / 2, band, d.cap);
+  });
+  svg.append(svgEl('text', { class: 'tick', x: x(0), y: CH - 6, 'text-anchor': data.length > 1 ? 'start' : 'middle' }, data[0].x));
+  if (data.length > 1) svg.append(svgEl('text', { class: 'tick', x: x(data.length - 1), y: CH - 6, 'text-anchor': 'end' }, data.at(-1).x));
+  svg.setAttribute('aria-label', 'Egzersizde gün gün çalınan en yüksek tempo (BPM)');
+  sel.textContent = data.at(-1).cap;
+}
+
+// ---------------------------------------------------------------- akort aleti
+// Mikrofonla perde (js/akort.js). İbre sapmayı yumuşatarak gösterir; ses kesilince yarım saniye
+// sonra söner. ±5 sent akortlu sayılır.
+const tuner = new Tuner();
+window.ttpTuner = tuner; // testler için
+// Teller Ayarlar'daki enstrümana göre (bas → bas telleri); küçük bağlantıyla öbürüne geçilir.
+let tunerInst = null;
+let tunerShown = { cents: 0, at: 0 };
+function renderTunerStrings() {
+  $('#tSwitch').textContent = tunerInst === 'bas' ? 'Gitar tellerini göster' : 'Bas tellerini göster';
+  $('#tStrings').classList.toggle('bas', tunerInst === 'bas');
+  $('#tStrings').replaceChildren(...TUNINGS[tunerInst].map(([n, midi]) => {
+    const name = noteName(midi);
+    return el('li', { 'data-string': n }, el('b', { text: name.tr }), el('span', { text: `${n}. tel · ${name.en}` }));
+  }));
+  tuner.min = tunerInst === 'bas' ? 35 : 60;
+}
+function showTuner() {
+  showView('tunerView');
+  document.title = 'Akort aleti · Tab-to-Play';
+  tunerInst = prefs.instrument === 'bas' ? 'bas' : 'gitar';
+  renderTunerStrings();
+  updateTunerButton();
+}
+function updateTunerButton() {
+  $('use', $('#tStart')).setAttribute('href', tuner.running ? '#i-pause' : '#i-play');
+  $('#tStart span').textContent = tuner.running ? 'Durdur' : 'Mikrofonu aç';
+}
+function stopTuner() {
+  if (!tuner.running) return;
+  tuner.stop();
+  updateTunerButton();
+  releaseWake();
+  $('.t-meter').classList.add('off');
+}
+tuner.onPitch = (p) => {
+  const meter = $('.t-meter');
+  const now = performance.now();
+  if (!p) {
+    // Ses kesilince son gösterim yarım saniye kalsın, sonra sönsün
+    if (now - tunerShown.at > 500) {
+      meter.classList.add('off');
+      meter.classList.remove('ok');
+      $('#tState').classList.remove('ok');
+    }
+    return;
+  }
+  const n = noteFrom(p.freq);
+  tunerShown = { cents: tunerShown.at && now - tunerShown.at < 500 ? tunerShown.cents * 0.6 + n.cents * 0.4 : n.cents, at: now };
+  const c = Math.round(tunerShown.cents);
+  const ok = Math.abs(c) <= 5;
+  $('#tNote').textContent = n.tr;
+  $('#tNoteEn').textContent = n.en;
+  $('#tNeedle').style.left = `${50 + clamp(c, -50, 50)}%`;
+  meter.classList.remove('off');
+  meter.classList.toggle('ok', ok);
+  $('#tState').classList.toggle('ok', ok);
+  $('#tState').textContent = ok ? 'Akortlu ✓' : c < 0 ? `Pes (${c} sent) · teli sıkıştır` : `Tiz (+${c} sent) · teli gevşet`;
+  $('#tFreq').textContent = `${p.freq.toFixed(1)} Hz`;
+  const s = nearestString(tunerInst, p.freq);
+  $$('#tStrings li').forEach((li) => li.classList.toggle('on', Number(li.dataset.string) === s.n && s.d < 1.5));
+};
+$('#tStart').addEventListener('click', async () => {
+  if (tuner.running) { stopTuner(); return; }
+  try {
+    await tuner.start();
+    $('#tState').textContent = 'Bir teli tek başına çal.';
+    requestWake();
+  } catch (e) {
+    console.warn('Mikrofon açılamadı', e);
+    $('#tState').textContent = e.name === 'NotAllowedError'
+      ? 'Mikrofon izni verilmedi. Tarayıcı ayarlarından bu siteye mikrofon izni ver, sonra yeniden dene.'
+      : e.name === 'NotFoundError' ? 'Mikrofon bulunamadı.' : 'Mikrofon açılamadı.';
+  }
+  updateTunerButton();
+});
+$('#tSwitch').addEventListener('click', () => {
+  tunerInst = tunerInst === 'bas' ? 'gitar' : 'bas';
+  renderTunerStrings();
+});
+$('#btnTuner').addEventListener('click', () => { location.hash = '#/akort'; });
+$('#tBack').addEventListener('click', () => {
+  if (lastView === 'tuner' && cameToTunerFrom === 'exlist') history.back();
+  else location.hash = '#/egzersiz';
+});
+
 // ---------------------------------------------------------------- tek başına metronom
 const metro = new Metronome();
 window.ttpMetro = metro; // testler için
 
+// Aksak ölçüler (metronom ekranındaki seçenekler): sekizlik grupları
+const AKSAK = ['3+2', '2+3', '3+3', '2+2+3', '3+2+2', '2+3+2', '2+2+2+3', '3+3+2+2', '3+3+3+3'];
 function applyMetroPrefs() {
+  if (!AKSAK.includes(prefs.mGroups)) prefs.mGroups = '2+2+3';
+  metro.groups = prefs.mMeter === 'aksak' ? prefs.mGroups.split('+').map(Number) : null;
   metro.bpm = clamp(Math.round(prefs.mBpm) || 80, EX_BPM_MIN, EX_BPM_MAX);
   metro.beats = clamp(Math.round(prefs.mBeats) || 4, 2, 7);
   metro.sub = clamp(Math.round(prefs.mSub) || 1, 1, 4);
@@ -1283,14 +2068,26 @@ function updateMetroUi() {
   $('#mRange').value = metro.bpm;
   $$('#segBeats button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.beats)));
   $$('#segSub button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === metro.sub)));
+  const aksak = !!metro.groups;
+  $$('#segMeter button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === (aksak ? 'aksak' : 'duz'))));
+  $$('#segGroups button').forEach((b) => b.setAttribute('aria-pressed', String(aksak && b.dataset.v === prefs.mGroups)));
+  $('#duzBox').hidden = aksak;
+  $('#aksakBox').hidden = !aksak;
   $('#mAccent').checked = metro.accent;
   $('#mVol').value = Math.round(metro.vol * 100);
   $('use', $('#mPlay')).setAttribute('href', metro.running ? '#i-pause' : '#i-play');
   $('#mPlay span').textContent = metro.running ? 'Durdur' : 'Başlat';
   $('#mPlay').setAttribute('aria-pressed', String(metro.running));
+  // Işıklar: düzde vuruş başına bir, aksakta sekizlik başına bir (grup başları büyük)
   const dots = $('#mBeats');
-  if (dots.children.length !== metro.beats) {
-    dots.replaceChildren(...Array.from({ length: metro.beats }, (_, i) => el('i', { class: i === 0 ? 'first' : '' })));
+  const key = aksak ? prefs.mGroups : String(metro.beats);
+  if (dots.dataset.key !== key) {
+    dots.dataset.key = key;
+    dots.classList.toggle('aksak', aksak);
+    const starts = new Set();
+    if (aksak) metro.groups.reduce((at, g) => { starts.add(at); return at + g; }, 0);
+    const n = aksak ? metro.groups.reduce((a, b) => a + b, 0) : metro.beats;
+    dots.replaceChildren(...Array.from({ length: n }, (_, i) => el('i', { class: [i === 0 ? 'first' : '', starts.has(i) ? 'gs' : ''].join(' ').trim() })));
   }
 }
 
@@ -1342,6 +2139,24 @@ $('#segBeats').addEventListener('click', (e) => {
   metro.restartBar();
   updateMetroUi();
 });
+$('#segMeter').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.mMeter = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
+$('#segGroups').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.v;
+  if (!v) return;
+  prefs.mGroups = v;
+  savePrefs();
+  applyMetroPrefs();
+  metro.restartBar();
+  updateMetroUi();
+});
 $('#segSub').addEventListener('click', (e) => {
   const v = Number(e.target.closest('button')?.dataset.v);
   if (!v) return;
@@ -1369,6 +2184,7 @@ function updateInstSeg() {
 $('#btnSettings').addEventListener('click', async () => {
   updateInstSeg();
   $('#ver').textContent = `v${VERSION} (${BUILD})`;
+  $('#backupInfo').textContent = backupInfo();
   const info = $('#storageInfo');
   info.textContent = `${songs.length} şarkı`;
   try {
@@ -1398,25 +2214,108 @@ $('#instGrid').addEventListener('click', (e) => {
   renderList();
 });
 
+// ---------------------------------------------------------------- yedekleme ve taşıma
+// Bütün veriler tek dosyada (js/yedek.js). Geri yüklenince sayfa yenilenir: tercihler, listeler ve
+// açık ekranlar yedekten gelenle baştan kurulsun.
+function backupInfo() {
+  const t = prefs.lastBackup;
+  if (!t) return 'Henüz yedek alınmadı.';
+  const days = Math.floor((Date.now() - t) / 864e5);
+  return `Son yedek: ${days === 0 ? 'bugün' : days === 1 ? 'dün' : `${days} gün önce`}.`;
+}
+$('#btnBackup').addEventListener('click', async () => {
+  const btn = $('#btnBackup');
+  btn.disabled = true;
+  try {
+    const data = await makeBackup(prefs, VERSION);
+    const name = `tab-to-play-yedek-${dayKey()}.json`;
+    const file = new File([JSON.stringify(data)], name, { type: 'application/json' });
+    // Telefonda paylaşım menüsü (Dosyalara kaydet, AirDrop…), olmazsa indirme
+    let shared = false;
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Tab-to-Play yedeği' }); shared = true; } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    if (!shared) {
+      const a = el('a', { href: URL.createObjectURL(file), download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+    prefs.lastBackup = Date.now();
+    savePrefs();
+    $('#backupInfo').textContent = backupInfo();
+    toast(`Yedek hazır: ${data.songs.length} şarkı`);
+  } catch (e) {
+    console.warn('Yedek alınamadı', e);
+    toast('Yedek alınamadı', 4000);
+  } finally {
+    btn.disabled = false;
+  }
+});
+$('#backupIn').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (data?.app !== 'tab-to-play') { toast('Bu dosya bir Tab-to-Play yedeği değil', 4000); return; }
+  if (!confirm(`Yedekteki ${data.songs.length} şarkı, ilerleme ve geçmiş bu cihazdakilerle birleştirilecek; ayarlar yedektekiyle değişecek. Devam edilsin mi?`)) return;
+  try {
+    const n = await restoreBackup(data);
+    if (data.prefs) Object.assign(prefs, data.prefs, { lastBackup: prefs.lastBackup });
+    savePrefs();
+    sessionStorage.setItem('ttp-geri-yuklendi', `Yedek yüklendi: ${n.songs} yeni şarkı, ${n.exercises} egzersiz, ${n.days} gün`);
+  } catch (err) {
+    console.warn('Yedek yüklenemedi', err);
+    toast(err.message === 'yeni sürüm yedeği' ? 'Bu yedek daha yeni bir sürümden; önce uygulamayı güncelle' : 'Yedek yüklenemedi', 4000);
+    return;
+  }
+  location.reload();
+});
+
 // ---------------------------------------------------------------- yönlendirme
 let lastView = null;
 let cameToExFrom = null; // egzersiz listesine nereden gelindi (geri düğmesi için)
 let cameToMetroFrom = null;
+let cameToPlanFrom = null;
+let cameToHistFrom = null;
+let cameToGuideFrom = null;
+let cameToTunerFrom = null;
 async function route() {
   const h = location.hash;
   let m;
   if ((m = h.match(/^#\/sarki\/([\w-]+)/))) {
-    cameFromList = lastView === 'lib';
+    cameFromList = lastView === 'lib' || lastView === 'plan'; // plandaki şarkı önerisinden de geri dönülür
+    if (lastView !== 'lib' && lastView !== 'player') playFrom = null; // liste çubuğu yalnızca listeden açılınca
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {
-    cameFromList = lastView === 'exlist';
+    cameFromList = ['exlist', 'plan', 'rehber'].includes(lastView);
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {
-    if (lastView !== 'player' && lastView !== 'metro') cameToExFrom = lastView;
+    if (!['player', 'metro', 'plan', 'hist', 'rehber', 'tuner'].includes(lastView)) cameToExFrom = lastView;
     lastView = 'exlist';
     await showExercises();
+  } else if (/^#\/plan\/?$/.test(h)) {
+    if (lastView !== 'player') cameToPlanFrom = lastView;
+    lastView = 'plan';
+    await showPlan();
+  } else if (/^#\/akort\/?$/.test(h)) {
+    cameToTunerFrom = lastView;
+    lastView = 'tuner';
+    showTuner();
+  } else if (/^#\/rehber\/?$/.test(h)) {
+    if (lastView !== 'player' || !cameToGuideFrom) cameToGuideFrom = ['exlist', 'player', 'lib'].includes(lastView) ? lastView : null;
+    lastView = 'rehber';
+    showGuide();
+  } else if (/^#\/gecmis\/?$/.test(h)) {
+    cameToHistFrom = lastView === 'exlist' || lastView === 'plan' ? lastView : null;
+    lastView = 'hist';
+    await showHistory();
   } else if (/^#\/metronom\/?$/.test(h)) {
     cameToMetroFrom = lastView;
     lastView = 'metro';
@@ -1431,12 +2330,25 @@ addEventListener('hashchange', route);
 // iPhone'da sessiz moddayken de ses gelsin (iOS 17+)
 try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* yok */ }
 
+// Yeni sürüm: service worker yeni sürümü kurup devralınca açık sayfalara kendi sürümünü bildirir
+// (sw.js). Sayfa eski sürümdeyse yenilemesi söylenir; çalarken sayfayı kendiliğinden yenilemeyiz.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker kaydedilemedi', e));
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Ana ekrandaki uygulama günlerce açık kalabiliyor: öne gelince yeni sürüm var mı diye bak
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch((e) => console.warn('Service worker kaydedilemedi', e));
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'surum' && e.data.build !== BUILD) $('#updateBar').hidden = false;
+  });
 }
+$('#btnReload').addEventListener('click', () => location.reload());
+$('#updateClose').addEventListener('click', () => { $('#updateBar').hidden = true; });
 
 (async function start() {
   if (new URLSearchParams(location.search).has('gelen')) history.replaceState(null, '', location.pathname + location.hash);
+  // Yedekten geri yüklendikten sonraki yenileme: ne yüklendiğini söyle
+  const restored = sessionStorage.getItem('ttp-geri-yuklendi');
+  if (restored) { sessionStorage.removeItem('ttp-geri-yuklendi'); setTimeout(() => toast(restored, 4000), 300); }
   await route();
   await checkInbox();
   if (!prefs.instrument) $('#instDlg').showModal();

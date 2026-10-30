@@ -14,7 +14,7 @@ const LIB_CACHE = `ttp-lib-${LIB_VERSION}-${SCOPE}`;
 const INBOX = 'ttp-gelen';
 const v = (p) => `${p}?v=${encodeURIComponent(BUILD)}`;
 const APP_FILES = [
-  './', v('css/app.css'), v('js/app.js'), v('js/db.js'), v('js/egzersiz.js'), v('js/metronom.js'),
+  './', v('css/app.css'), v('js/app.js'), v('js/db.js'), v('js/egzersiz.js'), v('js/metronom.js'), v('js/plan.js'), v('js/yedek.js'), v('js/akort.js'),
   'manifest.webmanifest', 'ornek.gp',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
   'icons/apple-touch-icon.png', 'icons/favicon-32.png',
@@ -40,6 +40,8 @@ self.addEventListener('activate', (e) => {
       if (k.startsWith('ttp-') && k.endsWith(SCOPE) && k !== APP_CACHE && k !== LIB_CACHE) await caches.delete(k);
     }
     await self.clients.claim();
+    // Açık sayfalar bu sürümü öğrensin; eski sürümdeki sayfa "Yeni sürüm hazır" der
+    for (const c of await self.clients.matchAll({ type: 'window' })) c.postMessage({ type: 'surum', build: BUILD });
   })());
 });
 

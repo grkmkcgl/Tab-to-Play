@@ -12,6 +12,22 @@ function gpFromTex(tex) {
   return new alphaTab.exporter.Gp7Exporter().export(importer.readScore(), settings);
 }
 
+// 16 bit tek kanal WAV
+function wav(freq, harm, rate, seconds) {
+  const n = rate * seconds;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8);
+  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
+  buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    let v = 0;
+    harm.forEach((a, k) => { v += a * Math.sin((2 * Math.PI * freq * (k + 1) * i) / rate); });
+    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v * 0.25)) * 32767), 44 + i * 2);
+  }
+  return buf;
+}
+
 function make() {
   fs.mkdirSync(OUT, { recursive: true });
   const bar = ':4 0.6 2.6 3.6 5.6';
@@ -54,6 +70,8 @@ ${drum} | ${drum} | ${drum} | ${drum}
 </score-partwise>
 `);
   fs.writeFileSync(path.join(OUT, 'bozuk.gp'), Buffer.from('bu bir guitar pro dosyası değil'.repeat(20)));
+  // Akort testi için mikrofon yerine verilen ses: La (A2, 110 Hz) ve harmonikleri, 48 kHz, 3 sn
+  fs.writeFileSync(path.join(OUT, 'la-110.wav'), wav(110, [1, 0.6, 0.35, 0.2], 48000, 3));
 }
 
 module.exports = { make, OUT };

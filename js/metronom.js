@@ -6,6 +6,11 @@ export class Metronome {
     this.bpm = 80;
     this.beats = 4; // ölçüdeki vuruş
     this.sub = 1; // vuruşun bölümü: 1 dörtlük, 2 sekizlik, 3 triole, 4 onaltılık
+    // Aksak ölçü: sekizlik grupları (ör. 7/8 için [2, 2, 3]); null ise düz ölçü (beats × sub).
+    // Aksakta her sekizlikte tık var, tempo dakikadaki sekizlik sayısı; ölçü başı güçlü, grup
+    // başları orta, diğerleri hafif.
+    this.groups = null;
+    this.trace = null; // testler için: dizi verilirse yazılan tıkların türü eklenir
     this.accent = true;
     this.vol = 0.8;
     this.running = false;
@@ -56,6 +61,17 @@ export class Metronome {
     const now = this.ctx.currentTime;
     if (this.next < now - 0.2) this.next = now + 0.05; // uzun bir duraklamadan sonra yetişmeye çalışma
     while (this.next < now + ahead) {
+      if (this.groups) {
+        const perBar = this.groups.reduce((a, b) => a + b, 0);
+        const i = this.tick % perBar;
+        let start = 0;
+        const groupStart = this.groups.some((g) => { if (start === i) return true; start += g; return false; });
+        this.click(this.next, i === 0 && this.accent ? 'accent' : groupStart ? 'beat' : 'sub');
+        this.queue.push({ t: this.next, beat: i });
+        this.next += 60 / this.bpm;
+        this.tick = (i + 1) % perBar;
+        continue;
+      }
       const perBar = this.beats * this.sub;
       const i = this.tick % perBar;
       const onBeat = i % this.sub === 0;
@@ -70,6 +86,7 @@ export class Metronome {
 
   click(t, kind) {
     this.clicks++;
+    this.trace?.push(kind);
     const ctx = this.ctx;
     const o = ctx.createOscillator();
     const g = ctx.createGain();

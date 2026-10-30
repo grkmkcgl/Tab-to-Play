@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="theme-color" content="#17130f">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#1c1814">
+<meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -36,6 +36,10 @@
   <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></symbol>
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 5h6v2H7v10h10v-4h2v6H5z"/></symbol>
   <symbol id="i-metro" viewBox="0 0 24 24"><path d="M9.2 3h5.6l4.4 18H4.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6.6 16h10.8M12 16l5-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><path d="M5 3h14v18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8 8 1.5 1.5L12 7M8 14l1.5 1.5L12 13M14 8.5h2.5M14 14.5h2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-guide" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.5 4 12 5.5v14c-2.5-1.5-5.5-1.5-8 0zM20 5.5C17.5 4 14.5 4 12 5.5v14c2.5-1.5 5.5-1.5 8 0z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tuner" viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 16l4-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.8"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.1 12.9a7.2 7.2 0 0 0 0-1.8l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.4-1a.5.5 0 0 0-.6.2L2.6 8.9a.5.5 0 0 0 .1.6l2 1.6a7.2 7.2 0 0 0 0 1.8l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1 .7 1.6.9l.4 2.6c0 .2.2.4.5.4h3.8c.2 0 .4-.2.5-.4l.4-2.6a7 7 0 0 0 1.6-.9l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
 </svg>
 
@@ -54,6 +58,13 @@
       <option value="title">A–Z</option>
     </select>
     <button id="favOnly" class="chip" type="button" aria-pressed="false" aria-label="Yalnızca favoriler"><svg class="ic"><use href="#i-star"/></svg></button>
+  </div>
+  <!-- Çalma listeleri: seçili liste şarkıları kendi sırasıyla gösterir -->
+  <div id="listBar" class="list-bar scroll-x" role="group" aria-label="Çalma listeleri"></div>
+  <div id="listHead" class="list-head" hidden>
+    <span id="listInfo" class="muted small"></span>
+    <button id="listRename" class="btn small-btn" type="button">Adını değiştir</button>
+    <button id="listDelete" class="btn small-btn danger" type="button">Listeyi sil</button>
   </div>
   <ul id="songList" class="song-list"></ul>
   <p id="noResult" class="muted center" hidden>Aramana uyan şarkı yok.</p>
@@ -85,15 +96,179 @@
         <button type="button" data-v="gitar">🎸 Elektro gitar</button><button type="button" data-v="davul">🥁 Davul</button>
       </div>
       <div class="seg wide" id="segExLevel" role="group" aria-label="Seviye">
-        <button type="button" data-v="baslangic">Başlangıç</button><button type="button" data-v="orta">Orta</button><button type="button" data-v="ileri">İleri</button>
+        <button type="button" data-v="baslangic">Başlangıç</button><button type="button" data-v="orta">Orta</button><button type="button" data-v="ileri">İleri</button><button type="button" data-v="olcu">Ölçüler</button>
       </div>
     </div>
+    <button id="btnPlan" class="metro-card plan-card" type="button">
+      <svg class="ic"><use href="#i-plan"/></svg>
+      <span><b>Çalışma planı</b><small>Her gün ne çalışacağını adım adım gösterir.</small></span>
+    </button>
+    <button id="btnGuide" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-guide"/></svg>
+      <span><b>Nota okuma rehberi</b><small id="guideCardSub">Tab işaretleri: ne anlama gelir, nasıl duyulur.</small></span>
+    </button>
+    <button id="btnHist" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-chart"/></svg>
+      <span><b>Çalışma geçmişi</b><small>Günlük süre, seri ve egzersizlerde tempo gelişimi.</small></span>
+    </button>
+    <button id="btnTuner" class="metro-card" type="button">
+      <svg class="ic"><use href="#i-tuner"/></svg>
+      <span><b>Akort aleti</b><small>Mikrofonla teli dinler, pes mi tiz mi gösterir.</small></span>
+    </button>
     <button id="btnMetro" class="metro-card" type="button">
       <svg class="ic"><use href="#i-metro"/></svg>
       <span><b>Metronom</b><small>Notasız, tek başına tempo tut: ölçü, bölüm, vurgu, vuruşla tempo.</small></span>
     </button>
     <p class="muted small">Egzersiz döngüde çalar, metronom açık gelir. Önerilen en düşük tempoda temiz çalabildiğinde tempoyu biraz artır; <b>Tempo</b> panelindeki antrenör bunu senin yerine yapar.</p>
     <ul id="exList" class="ex-list"></ul>
+  </div>
+</section>
+
+<!-- Çalışma planı (gitar ya da davul) -->
+<section id="planView" class="view" hidden>
+  <header class="topbar">
+    <button id="planBack" class="icon-btn" type="button" aria-label="Egzersizlere dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title" id="planTitle">Çalışma planı</h1>
+  </header>
+  <div class="ex-wrap plan">
+    <div class="seg wide" id="segStage" role="group" aria-label="Aşama">
+      <button type="button" data-v="0">1. Temeller</button><button type="button" data-v="1">2. Orta</button><button type="button" data-v="2">3. İleri</button>
+    </div>
+    <p class="muted small" id="planWhen"></p>
+    <div id="planReady" class="plan-ready" hidden></div>
+    <div class="field plan-min"><span>Günlük süre</span>
+      <div class="seg" id="segPlanMin" role="group" aria-label="Günlük süre">
+        <button type="button" data-v="15">15 dk</button><button type="button" data-v="30">30 dk</button><button type="button" data-v="45">45 dk</button>
+      </div>
+    </div>
+    <h2 class="plan-h">Bugünkü çalışma <small class="muted" id="planMinLbl">(~30 dk)</small></h2>
+    <ol id="planToday" class="plan-today"></ol>
+    <p class="muted small">Her gün en uzun süredir çalışmadığın egzersizler gelir. Çalıştıkların gün boyunca ✓ ile kalır.</p>
+    <details class="plan-rules">
+      <summary>Nasıl çalışmalı?</summary>
+      <ul id="planRules"></ul>
+    </details>
+    <div id="planNext" class="plan-next"></div>
+    <h2 class="plan-h">Bu aşamadaki egzersizler</h2>
+    <div id="planAll"></div>
+  </div>
+</section>
+
+<!-- Çalışma geçmişi -->
+<section id="histView" class="view" hidden>
+  <header class="topbar">
+    <button id="histBack" class="icon-btn" type="button" aria-label="Geri dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Çalışma geçmişi</h1>
+  </header>
+  <div class="ex-wrap hist">
+    <div class="stat-row">
+      <div class="stat"><span>Seri</span><b id="hStreak">0 gün</b></div>
+      <div class="stat"><span>Son 7 gün</span><b id="hWeek">0 sn</b></div>
+      <div class="stat"><span>Toplam</span><b id="hTotal">0 sn</b></div>
+    </div>
+    <p id="hEmpty" class="muted">Henüz kayıt yok. Bir şarkı ya da egzersiz çaldığında süre burada birikir.</p>
+    <div id="hBody" hidden>
+      <h2 class="plan-h">Son 14 gün <small class="muted">(dakika)</small></h2>
+      <div id="hDays" class="chart"></div>
+      <p id="hDaysSel" class="chart-sel muted small" aria-live="polite"></p>
+      <div id="hTempoBox">
+        <h2 class="plan-h">Tempo gelişimi <small class="muted">(BPM)</small></h2>
+        <select id="hEx" aria-label="Egzersiz"></select>
+        <div id="hTempo" class="chart"></div>
+        <p id="hTempoSel" class="chart-sel muted small" aria-live="polite"></p>
+      </div>
+      <h2 class="plan-h">Günler</h2>
+      <ol id="hList" class="hist-list"></ol>
+    </div>
+  </div>
+</section>
+
+<!-- Nota okuma rehberi -->
+<section id="guideView" class="view" hidden>
+  <header class="topbar">
+    <button id="guideBack" class="icon-btn" type="button" aria-label="Geri dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title" id="guideTitle">Nota okuma rehberi</h1>
+  </header>
+  <!-- Egzersiz ekranında seçili enstrümanın bölümü görünür (çalardan açılınca çalınan partinin) -->
+  <div class="ex-wrap guide">
+
+    <div data-guide="davul">
+      <button class="btn primary guide-open" type="button" data-open="r-davul">Notada gör ve dinle</button>
+      <h2 class="plan-h">Nota başının şekli</h2>
+      <ul class="guide-list">
+        <li><b>Dolu yuvarlak:</b> davul — trampet, tomlar, kick.</li>
+        <li><b>x:</b> zil — hi-hat, ride, crash. Trampetin yerinde x ise <b>side stick</b>: çubuğu trampetin kenarına yatırıp vur.</li>
+        <li><b>Daire içinde x:</b> açık hi-hat. <b>Elmas:</b> ride çanı.</li>
+      </ul>
+      <h2 class="plan-h">Yüksekliği: hangi davul</h2>
+      <dl class="guide-keys">
+        <dt>Crash</dt><dd>portenin üstünde, ek çizgide (x)</dd>
+        <dt>Hi-hat</dt><dd>en üst çizginin hemen üstünde (x)</dd>
+        <dt>Ride</dt><dd>en üst çizgide (x)</dd>
+        <dt>Tiz tom</dt><dd>üstten ikinci çizgide</dd>
+        <dt>Trampet</dt><dd>üstten ikinci aralıkta</dd>
+        <dt>Orta tom</dt><dd>orta çizgide</dd>
+        <dt>Yer tomu</dt><dd>alttan ikinci aralıkta</dd>
+        <dt>Kick</dt><dd>en alt çizgide</dd>
+        <dt>Ayak hi-hat</dt><dd>portenin altında (x), ayakla kapatılır</dd>
+      </dl>
+      <p class="muted small">Kısaca: yukarıda ziller, ortada trampet ve tomlar, en altta ayakla çalınanlar.</p>
+      <h2 class="plan-h">İşaretler</h2>
+      <ul class="guide-list">
+        <li><b>&gt;</b> vurgu: o notayı diğerlerinden yüksek vur.</li>
+        <li><b>( )</b> parantez içinde nota: ghost — neredeyse duyulmayacak kadar hafif.</li>
+        <li><b>Küçük nota:</b> asıl notanın hemen önünde: flam — iki vuruş neredeyse aynı anda, küçük olan alçaktan.</li>
+        <li><b>R / L</b> notanın üstünde: sağ el / sol el. Ritimlerde yazmıyorsa hi-hat ve ride sağ elle, trampet sol elle çalınır (solaksan tersi); fill'lerde ve tomlarda hep yazılı.</li>
+        <li><b>3</b> yazan grup: triole — bir vuruşa üç eşit nota.</li>
+      </ul>
+    </div>
+
+    <div data-guide="gitar" hidden>
+      <button class="btn primary guide-open" type="button" data-open="r-gitar">Notada gör ve dinle</button>
+      <h2 class="plan-h">Tab nasıl okunur?</h2>
+      <ul class="guide-list">
+        <li>Altı çizgi altı tel: <b>en üst çizgi ince Mi</b> (1. tel), <b>en alt çizgi kalın Mi</b> (6. tel).</li>
+        <li>Rakam o telde basılacak perde; <b>0</b> açık tel. Aynı hizadaki rakamlar birlikte çalınır (akor).</li>
+        <li>Ritim, rakamların altındaki saplardan okunur (ya da Görünüm'de <b>İkisi</b> seçilince üstteki notadan).</li>
+      </ul>
+      <h2 class="plan-h">İşaretler</h2>
+      <dl class="guide-keys">
+        <dt>H</dt><dd>çekiç (hammer-on): ilk notayı penala, ikincisini yalnızca sol elle perdeye vurarak çıkar</dd>
+        <dt>P</dt><dd>çekme (pull-off): parmağı telden çekerek alttaki notayı çıkar</dd>
+        <dt>sl.</dt><dd>kaydırma (slide): parmağı teli bırakmadan öteki perdeye kaydır</dd>
+        <dt>Ok, full / ½</dt><dd>bend: teli iterek sesi bir ses (full) ya da yarım ses (½) yükselt</dd>
+        <dt>Dalgalı çizgi</dt><dd>vibrato: teli hafifçe sallayarak sesi titret</dd>
+        <dt>P.M.</dt><dd>palm mute: sağ elin kenarı köprüye yakın tellere değsin</dd>
+        <dt>x</dt><dd>ölü nota: teli sol elle boğ, perdeye basma; tok, perdesiz bir ses</dd>
+        <dt>&lt;12&gt;, N.H.</dt><dd>flajole: parmağı telin üstüne yalnızca değdir, basma</dd>
+        <dt>( )</dt><dd>ghost: çok hafif çalınan nota</dd>
+        <dt>&gt;</dt><dd>vurgu: o notayı daha güçlü çal</dd>
+        <dt>Let Ring</dt><dd>bırak çınlasın: notalar birbirinin üstüne çalsın, parmağı kaldırma</dd>
+        <dt>⊓ / V</dt><dd>aşağı / yukarı penalama</dd>
+        <dt>Sapta çizgiler</dt><dd>tremolo: aynı notayı çok hızlı tekrarla</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- Akort aleti -->
+<section id="tunerView" class="view" hidden>
+  <header class="topbar">
+    <button id="tBack" class="icon-btn" type="button" aria-label="Egzersizlere dön"><svg class="ic"><use href="#i-back"/></svg></button>
+    <h1 class="view-title">Akort aleti</h1>
+  </header>
+  <div class="tuner">
+    <div class="t-note"><b id="tNote">–</b><span id="tNoteEn"></span></div>
+    <div class="t-meter off" aria-hidden="true">
+      <i class="t-zone"></i><i class="t-mid"></i><i id="tNeedle" class="t-needle"></i>
+      <span class="t-l">−50</span><span class="t-r">+50</span>
+    </div>
+    <p id="tState" class="t-state" aria-live="polite">Mikrofonu aç ve bir teli tek başına çal.</p>
+    <p id="tFreq" class="muted small t-freq"></p>
+    <ol id="tStrings" class="t-strings"></ol>
+    <button id="tSwitch" class="link-btn" type="button"></button>
+    <button id="tStart" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Mikrofonu aç</span></button>
+    <p class="muted small">Standart akort, La = 440 Hz. Pes: ses düşük, teli sıkıştır. Tiz: ses yüksek, teli gevşet.</p>
   </div>
 </section>
 
@@ -115,14 +290,30 @@
     <input id="mRange" type="range" min="30" max="240" step="1" value="80" aria-label="Tempo (BPM)">
     <button id="mPlay" class="btn primary m-play" type="button"><svg class="ic"><use href="#i-play"/></svg><span>Başlat</span></button>
     <button id="mTap" class="btn" type="button">Vuruşla ayarla <small class="muted">(tempoda birkaç kez dokun)</small></button>
-    <div class="field"><span>Ölçüdeki vuruş</span>
-      <div class="seg wide" id="segBeats" role="group" aria-label="Ölçüdeki vuruş">
-        <button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5</button><button type="button" data-v="6">6</button><button type="button" data-v="7">7</button>
+    <div class="field"><span>Ölçü</span>
+      <div class="seg wide" id="segMeter" role="group" aria-label="Ölçü tipi">
+        <button type="button" data-v="duz">Düz (x/4)</button><button type="button" data-v="aksak">Aksak (x/8)</button>
       </div>
     </div>
-    <div class="field"><span>Bölüm</span>
-      <div class="seg wide" id="segSub" role="group" aria-label="Vuruşun bölümü">
-        <button type="button" data-v="1">Dörtlük</button><button type="button" data-v="2">Sekizlik</button><button type="button" data-v="3">Triole</button><button type="button" data-v="4">16'lık</button>
+    <div id="duzBox" class="m-box">
+      <div class="field"><span>Ölçüdeki vuruş</span>
+        <div class="seg wide" id="segBeats" role="group" aria-label="Ölçüdeki vuruş">
+          <button type="button" data-v="2">2</button><button type="button" data-v="3">3</button><button type="button" data-v="4">4</button><button type="button" data-v="5">5</button><button type="button" data-v="6">6</button><button type="button" data-v="7">7</button>
+        </div>
+      </div>
+      <div class="field"><span>Bölüm</span>
+        <div class="seg wide" id="segSub" role="group" aria-label="Vuruşun bölümü">
+          <button type="button" data-v="1">Dörtlük</button><button type="button" data-v="2">Sekizlik</button><button type="button" data-v="3">Triole</button><button type="button" data-v="4">16'lık</button>
+        </div>
+      </div>
+    </div>
+    <div id="aksakBox" class="m-box" hidden>
+      <div class="field"><span>Aksak ölçü <small>(tempo dakikadaki sekizlik sayısı; grup başları vurgulu)</small></span>
+        <div class="seg grid3" id="segGroups" role="group" aria-label="Aksak ölçü">
+          <button type="button" data-v="3+2">5/8 · 3+2</button><button type="button" data-v="2+3">5/8 · 2+3</button><button type="button" data-v="3+3">6/8 · 3+3</button>
+          <button type="button" data-v="2+2+3">7/8 · 2+2+3</button><button type="button" data-v="3+2+2">7/8 · 3+2+2</button><button type="button" data-v="2+3+2">7/8 · 2+3+2</button>
+          <button type="button" data-v="2+2+2+3">9/8 · 2+2+2+3</button><button type="button" data-v="3+3+2+2">10/8 · 3+3+2+2</button><button type="button" data-v="3+3+3+3">12/8 · 3+3+3+3</button>
+        </div>
       </div>
     </div>
     <label class="switch"><input type="checkbox" id="mAccent"><span>İlk vuruş vurgulu</span></label>
@@ -137,6 +328,11 @@
     <div class="song-head"><b id="pTitle"></b><span id="pArtist"></span></div>
     <button id="btnTrack" class="chip track-chip" type="button" data-panel="mix" aria-label="Parti seç"></button>
   </header>
+  <!-- Listeden açılan şarkıda: liste adı, sıra, sonraki şarkı -->
+  <div id="playList" class="play-list" hidden>
+    <span id="playListInfo"></span>
+    <button id="playNext" class="btn small-btn" type="button"></button>
+  </div>
   <main id="sheetWrap" class="sheet-wrap">
     <div id="sheet"></div>
     <div id="loading" class="loading" hidden><span class="spinner"></span><span id="loadingText">Yükleniyor…</span></div>
@@ -176,6 +372,10 @@
 
     <div id="p-loop" class="panel" hidden role="dialog" aria-label="Döngü">
       <div class="panel-head"><h3>Döngü <small class="muted">(ölçü)</small></h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <div id="secBox" class="sec-box" hidden>
+        <span class="sec-h">Bölümler</span>
+        <ul id="secList" class="sec-list scroll-x"></ul>
+      </div>
       <label class="switch"><input type="checkbox" id="loopOn"><span>Seçili bölümü tekrar tekrar çal</span></label>
       <div class="loop-grid">
         <span>Başlangıç</span>
@@ -199,6 +399,7 @@
 
     <div id="p-view" class="panel" hidden role="dialog" aria-label="Görünüm">
       <div class="panel-head"><h3>Görünüm</h3><button class="icon-btn" type="button" data-close aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <button id="viewGuide" class="btn small-btn guide-link" type="button"><svg class="ic"><use href="#i-guide"/></svg>Nota okuma rehberi</button>
       <div class="field"><span>Gösterim</span>
         <div class="seg" id="segStave">
           <button type="button" data-v="tab">Tab</button><button type="button" data-v="nota">Nota</button><button type="button" data-v="ikisi">İkisi</button>
@@ -213,12 +414,17 @@
       <div class="field"><span>Boyut</span>
         <div class="stepper"><button type="button" class="btn" data-zoom="-0.1" aria-label="Küçült">−</button><output id="zoomOut">%100</output><button type="button" class="btn" data-zoom="0.1" aria-label="Büyüt">+</button></div>
       </div>
+      <div class="field"><span>Tema</span>
+        <div class="seg" id="segThemeView" data-theme-seg role="group" aria-label="Tema">
+          <button type="button" data-v="acik">Açık</button><button type="button" data-v="koyu">Koyu</button><button type="button" data-v="gece">Gece</button>
+        </div>
+      </div>
       <label class="switch"><input type="checkbox" id="follow"><span>Çalarken notaları otomatik kaydır</span></label>
       <label class="switch"><input type="checkbox" id="wake"><span>Çalarken ekranı açık tut</span></label>
     </div>
 
     <div class="progress">
-      <span id="posBar" class="pos">Ölçü –</span>
+      <span class="pos-wrap"><span id="posBar" class="pos">Ölçü –</span><span id="posSec" class="pos sec"></span></span>
       <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Şarkıda konum">
       <span id="posTime" class="pos">0:00 / 0:00</span>
     </div>
@@ -241,6 +447,16 @@
     <button type="button" class="btn" data-inst="bas">🎸 Bas</button>
     <button type="button" class="btn" data-inst="davul">🥁 Davul</button>
     <button type="button" class="btn" data-inst="diger">🎹 Diğer</button>
+  </div>
+</dialog>
+
+<dialog id="listDlg" class="dlg">
+  <div class="panel-head"><h2>Listeye ekle</h2><button class="icon-btn" type="button" data-close-dlg aria-label="Kapat"><svg class="ic"><use href="#i-close"/></svg></button></div>
+  <p id="listDlgSong" class="muted"></p>
+  <ul id="listChecks" class="list-checks"></ul>
+  <div class="btn-row new-list">
+    <input id="newListName" type="text" placeholder="Yeni liste adı (ör. Prova)" autocomplete="off" aria-label="Yeni liste adı">
+    <button id="newListAdd" class="btn" type="button">Oluştur ve ekle</button>
   </div>
 </dialog>
 
@@ -270,6 +486,12 @@
       <button type="button" data-v="gitar">Gitar</button><button type="button" data-v="bas">Bas</button><button type="button" data-v="davul">Davul</button><button type="button" data-v="diger">Diğer</button>
     </div>
   </div>
+  <div class="field"><span>Tema</span>
+    <div class="seg" id="segTheme" data-theme-seg role="group" aria-label="Tema">
+      <button type="button" data-v="acik">Açık</button><button type="button" data-v="koyu">Koyu</button><button type="button" data-v="gece">Gece</button>
+    </div>
+  </div>
+  <p class="muted small">Gece: nota alanı da koyu; notalar yumuşak açık renkte, gözü yormaz.</p>
   <h3>Şarkı nasıl eklenir?</h3>
   <ul class="help">
     <li>Guitar Pro (.gp, .gp3, .gp4, .gp5, .gpx) ve MusicXML (.xml, .musicxml) dosyaları açılır. Kütüphanedeki <b>Tab bul</b> şarkıyı tab sitelerinde arar.</li>
@@ -279,6 +501,14 @@
     <li>Bir şarkıyı başka birine göndermek için kütüphanede şarkının yanındaki <b>⋮ → Paylaş</b>.</li>
   </ul>
   <button id="btnDemo2" class="btn" type="button">Örnek şarkıyı ekle</button>
+  <h3>Yedekleme ve taşıma</h3>
+  <p class="muted small">Şarkılar, ayarlar, egzersiz ilerlemesi, çalışma geçmişi ve listeler tek bir dosyada. Başka cihaza geçerken ya da tarayıcı verilerini silmeden önce yedeği indir; yeni cihazda <b>Yedekten geri yükle</b> ile aç. Geri yükleme bu cihazdakilerle birleştirir.</p>
+  <div class="btn-row">
+    <button id="btnBackup" class="btn" type="button">Yedeği indir</button>
+    <label class="btn" for="backupIn">Yedekten geri yükle</label>
+    <input id="backupIn" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p id="backupInfo" class="muted small"></p>
   <h3>Depolama</h3>
   <p id="storageInfo" class="muted small"></p>
   <h3>Hakkında</h3>
@@ -286,6 +516,11 @@
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="updateBar" class="update-bar" role="status" hidden>
+  <span>Yeni sürüm hazır.</span>
+  <button id="btnReload" class="btn primary" type="button">Yenile</button>
+  <button id="updateClose" class="icon-btn" type="button" aria-label="Sonra"><svg class="ic"><use href="#i-close"/></svg></button>
+</div>
 <div id="dropHint" class="drop-hint" hidden>Dosyaları bırak, kütüphaneye ekleyeyim</div>
 
 <script src="lib/alphaTab.min.js"></script>

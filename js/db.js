@@ -2,12 +2,14 @@
 //   songs: şarkı bilgisi ve şarkıya özel ayarlar (hız, döngü, sessiz partiler…)
 //   files: dosyanın kendisi (ArrayBuffer), listeyi açarken hepsini okumamak için ayrı tutulur.
 // Egzersiz ilerlemesi (tempo, döngü, antrenör) ayrı bir veritabanında: tab-to-play-egzersiz / progress.
+// Çalışma geçmişi ve çalma listeleri de ayrı: tab-to-play-veri / gunler, listeler.
 // Ayrı tutuldu ki şarkı veritabanının sürümü yükseltilmesin (eski sürüm başka sekmede açıksa
 // yükseltme bekler ve uygulama açılmaz).
 const DB_NAME = 'tab-to-play';
 const DB_VERSION = 1;
 let dbPromise = null;
 let exPromise = null;
+let dataPromise = null;
 
 function openDb() {
   if (!dbPromise) {
@@ -38,6 +40,22 @@ function openExDb() {
     });
   }
   return exPromise;
+}
+
+function openDataDb() {
+  if (!dataPromise) {
+    dataPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open('tab-to-play-veri', 1);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains('gunler')) d.createObjectStore('gunler', { keyPath: 'day' });
+        if (!d.objectStoreNames.contains('listeler')) d.createObjectStore('listeler', { keyPath: 'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return dataPromise;
 }
 
 function done(tx) {
@@ -101,6 +119,55 @@ export const db = {
     const d = await openExDb();
     const tx = d.transaction('progress', 'readwrite');
     tx.objectStore('progress').put(rec);
+    return done(tx);
+  },
+  // Çalışma geçmişi, gün başına bir kayıt:
+  //   { day: 'YYYY-AA-GG', sec, items: { [şarkı ya da egzersiz kimliği]: { sec, bpm?, title, kind, inst? } } }
+  // Süre eklenir, tempo en yüksek olan kalır. Eklendikten sonraki kalemi döndürür.
+  async addPractice(day, id, { sec, bpm, title, kind, inst }) {
+    const d = await openDataDb();
+    const tx = d.transaction('gunler', 'readwrite');
+    const store = tx.objectStore('gunler');
+    let item = null;
+    store.get(day).onsuccess = (e) => {
+      const rec = e.target.result || { day, sec: 0, items: {} };
+      item = rec.items[id] || { sec: 0, title, kind };
+      item.sec += sec;
+      item.title = title;
+      if (inst) item.inst = inst;
+      if (bpm) item.bpm = Math.max(item.bpm || 0, bpm);
+      rec.items[id] = item;
+      rec.sec += sec;
+      store.put(rec);
+    };
+    await done(tx);
+    return item;
+  },
+  async allDays() {
+    const d = await openDataDb();
+    return result(d.transaction('gunler').objectStore('gunler').getAll());
+  },
+  async putDay(rec) {
+    const d = await openDataDb();
+    const tx = d.transaction('gunler', 'readwrite');
+    tx.objectStore('gunler').put(rec);
+    return done(tx);
+  },
+  // Çalma listeleri: { id, name, songs: [şarkı kimlikleri, sırayla], updated }
+  async allLists() {
+    const d = await openDataDb();
+    return result(d.transaction('listeler').objectStore('listeler').getAll());
+  },
+  async putList(rec) {
+    const d = await openDataDb();
+    const tx = d.transaction('listeler', 'readwrite');
+    tx.objectStore('listeler').put(rec);
+    return done(tx);
+  },
+  async deleteList(id) {
+    const d = await openDataDb();
+    const tx = d.transaction('listeler', 'readwrite');
+    tx.objectStore('listeler').delete(id);
     return done(tx);
   },
 };
