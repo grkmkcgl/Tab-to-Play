@@ -3,7 +3,7 @@
 #
 # Önizleme: aşağıdaki önizleme dalı varsa o da .../onizleme/ adresinde yayınlanır (canlı site
 # main'den gelir, aynen kalır). O dala gönderilince Test iş akışı geçerse yayın yenilenir.
-# Dalı değiştirmek için iki yerdeki adı birlikte değiştir. Dal silinince önizleme de kalkar.
+# Dalı değiştirmek için üç yerdeki adı birlikte değiştir. Dal silinince önizleme de kalkar.
 name: Yayınla
 
 on:
@@ -12,6 +12,9 @@ on:
   workflow_run:
     workflows: [Test]
     types: [completed]
+    # Yalnızca önizleme dalının testleri. Başka dalların (ve PR'ların) testleri de tetikleseydi, aynı
+    # anda biten o boş çalışmalar aşağıdaki concurrency yüzünden asıl önizleme yayınını iptal ediyordu.
+    branches: [ccr-04f3bc7b-mmi4nj]
   workflow_dispatch:
 
 permissions:
@@ -26,7 +29,8 @@ concurrency:
 jobs:
   test:
     if: github.event_name != 'workflow_run'
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,12 +41,27 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm test
 
+  # Safari'nin motoru (WebKit) ile de testler geçmeden yayınlanmaz
+  webkit:
+    if: github.event_name != 'workflow_run'
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps webkit
+      - run: npm run test:webkit
+
   deploy:
-    needs: test
+    needs: [test, webkit]
     # Önizleme dalının testleri geçtiyse (workflow_run) main'in testlerini yeniden çalıştırmadan yayınla
     if: >-
       always() && (
-        (github.event_name != 'workflow_run' && needs.test.result == 'success') ||
+        (github.event_name != 'workflow_run' && needs.test.result == 'success' && needs.webkit.result == 'success') ||
         (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
          github.event.workflow_run.head_branch == 'ccr-04f3bc7b-mmi4nj')
       )
