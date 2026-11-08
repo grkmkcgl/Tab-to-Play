@@ -26,7 +26,8 @@ concurrency:
 jobs:
   test:
     if: github.event_name != 'workflow_run'
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +41,8 @@ jobs:
   # Safari'nin motoru (WebKit) ile de testler geçmeden yayınlanmaz
   webkit:
     if: github.event_name != 'workflow_run'
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

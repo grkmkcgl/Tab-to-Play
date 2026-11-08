@@ -7,7 +7,8 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,7 +21,8 @@ jobs:
 
   # Safari'nin motoru: `webkit: true` işaretli testler (açılış, çalma, egzersiz, plan, metronom, dar ekran)
   webkit:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 ubuntu-latest'e (26.04) tarayıcı kuramıyor; desteklediği sürüme sabit
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
