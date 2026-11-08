@@ -111,6 +111,12 @@ class App {
     return this.text('#toast');
   }
 
+  // Yazı değişene kadar bekle (en çok 5 sn), sonra karşılaştır
+  async textIs(sel, want, msg) {
+    await this.page.waitForFunction(([q, w]) => document.querySelector(q)?.textContent === w, [sel, want], { timeout: 5000 }).catch(() => {});
+    eq(await this.text(sel), want, msg || sel);
+  }
+
   async panel(name) {
     await this.click(`.ctl[data-panel="${name}"]`);
     await this.page.waitForSelector(`#p-${name}:not([hidden])`);
@@ -817,7 +823,8 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   eq(await today(), [['g-b1'], ['g-b3', 'g-b6'], ['g-b5'], ['g-t2'], []], 'bugünkü çalışma');
   assert((await app.text('#planWhen')).includes('0/'), 'hedef sayacı');
 
-  // Egzersize git, açıp çıkmak çalışmak sayılmaz; çalışınca geri dönüldüğünde plan ✓ ile gösterir
+  // Egzersize git, açıp çıkmak çalışmak sayılmaz; biraz çalışınca süre görünür, hedef süre (5 dk)
+  // dolmadan ✓ gelmez, ama egzersiz gün boyunca listede kalır
   await app.click('#planToday [data-id="g-b1"]');
   await app.ready();
   eq(await app.text('#pTitle'), 'Açık teller', 'plandan egzersiz');
@@ -829,8 +836,10 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   await app.ev(() => ttpPractice(25));
   await app.click('#btnBack');
   await p.waitForSelector('#planView:not([hidden])');
-  await p.waitForSelector('#planToday [data-id="g-b1"] .done');
+  await app.textIs('#planToday > li:first-child .plan-step-h', '1. Isınma · 0:25 / 5 dk');
+  assert(!(await p.isVisible('#planToday [data-id="g-b1"] .done')), 'süre dolmadan ✓ yok');
   eq((await today())[0], ['g-b1'], 'bugün çalışılan yerinde kalır');
+  assert(await p.isVisible('#planAll [data-id="g-b1"] .done'), 'aşamanın listesinde bugün çalışıldı ✓');
 
   // Aşama değişir ve hatırlanır
   await app.click('#segStage [data-v="1"]');
@@ -861,7 +870,8 @@ test('çalışma planı: gitar ve davul, aşamalar, bugünkü çalışma sıras�
   eq(await app.text('#pTitle'), 'Dörtlük ritim', 'plandan davul egzersizi');
   await app.ev(() => ttpPractice(25));
   await app.click('#btnBack');
-  await p.waitForSelector('#planToday [data-id="d-b1"] .done');
+  await p.waitForSelector('#planView:not([hidden])');
+  await app.textIs('#planToday [data-id="d-b1"] .ex-meta span:last-child', '⏱ 0:25 / 5 dk', 'davul teknik adımında egzersizin süresi');
   eq((await today())[1], ['d-b1', 'd-b9'], 'bugün çalışılan davul egzersizi yerinde kalır');
   await app.click('#segStage [data-v="2"]');
   eq((await today())[0], ['d-i1'], 'ileri aşama ısınma');
@@ -1106,6 +1116,72 @@ test('bölümler: dosyadaki bölümler listelenir, bölüme gidilir, bölüm dö
   await app.close();
 }, { webkit: true });
 
+test('süre göstergesi: çalarken işleyen sayaç, plandaki hedef süre, dolunca haber ve sonraki egzersiz; planda adım ve gün ilerlemesi', async (b, t) => {
+  const app = await App.open(b, t);
+  const p = app.page;
+  await app.ev(() => { location.hash = '#/plan'; });
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  await app.textIs('#planProgLbl', 'Bugün 0 / 30 dk çalıştın');
+  // Plandan açılan egzersiz: hedef süre ve adım
+  await app.click('#planToday [data-id="g-b1"]');
+  await app.ready();
+  assert(await p.isVisible('#exClock'), 'sayaç görünür');
+  eq([await app.text('#exClockTime'), await app.text('#exClockStep'), await p.isVisible('#exClockBar'), await p.isVisible('#exClockNext')],
+    ['0:00 / 5 dk', ' · Isınma', true, false], 'başta');
+  // Yalnızca çalarken işler
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 1);
+  await p.waitForFunction(() => document.querySelector('#exClockTime').textContent !== '0:00 / 5 dk', null, { timeout: 5000 });
+  await app.click('#btnPlay');
+  await p.waitForFunction(() => ttpApi.playerState === 0);
+  const paused = await app.text('#exClockTime');
+  assert(/^0:0[1-9] \/ 5 dk$/.test(paused), `çalınca işledi: ${paused}`);
+  await p.waitForTimeout(1300);
+  eq(await app.text('#exClockTime'), paused, 'durunca durur');
+  // Süre dolunca haber verilir; plandaki sonraki egzersize geçilir
+  await app.ev(() => ttpPractice(300));
+  assert((await app.toast(/5 dk tamam/)).includes('✓'), 'haber');
+  const next = await app.ev(async () => (await import('./js/egzersiz.js?v=__SURUM__')).findExercise('g-b3').title);
+  eq([await p.isVisible('#exClockOk'), await p.isVisible('#exClockBar'), await app.text('#exClockNext')], [true, false, `Sonraki: ${next} ›`], 'süre doldu');
+  await app.ev(() => { window.__prevScore = ttpApi.score; });
+  await app.click('#exClockNext');
+  await p.waitForFunction(() => ttpApi.score && ttpApi.score !== window.__prevScore);
+  await app.ready();
+  eq([await app.text('#pTitle'), await app.text('#exClockTime'), await app.text('#exClockStep')], [next, '0:00 / 5 dk', ' · Teknik'], 'sonraki egzersiz');
+  await app.ev(() => ttpPractice(120));
+  // Geri düğmesi yine plana döner; adımda ve günde ilerleme (her egzersiz kendi hedefine kadar sayılır)
+  await app.click('#btnBack');
+  await p.waitForSelector('#planView:not([hidden])');
+  await app.textIs('#planProgLbl', 'Bugün 7 / 30 dk çalıştın');
+  eq(await app.text('#planToday > li:nth-child(1) .plan-step-h'), '1. Isınma · 5:00 / 5 dk ✓ (bugün tamam)', 'ısınma tamam');
+  eq(await app.text('#planToday > li:nth-child(2) .plan-step-h'), '2. Teknik · 2:00 / 10 dk', 'teknik');
+  assert((await app.text('#planToday [data-id="g-b3"] .ex-meta')).includes('⏱ 2:00 / 5 dk'), 'iki egzersizli adımda egzersizin süresi');
+  assert(await p.isVisible('#planToday [data-id="g-b1"] .done'), 'süresi dolan egzersize ✓');
+  assert(!(await p.isVisible('#planToday [data-id="g-b3"] .done')), 'süresi dolmayana ✓ yok');
+  const bar = await p.$eval('#planProg i', (e) => e.style.width);
+  assert(Math.abs(parseFloat(bar) - (420 / 1800) * 100) < 0.1, `gün çubuğu: ${bar}`);
+  // Kalıcı
+  await p.reload();
+  await p.waitForSelector('#planView:not([hidden]) #planToday li');
+  await app.textIs('#planProgLbl', 'Bugün 7 / 30 dk çalıştın');
+  // Şarkı adımı: bugün şarkı çalınan süre
+  await app.click('[data-go="lib"]');
+  await p.waitForSelector('#libView:not([hidden])');
+  await app.addDemo();
+  assert(!(await p.isVisible('#exClock')), 'şarkıda sayaç yok');
+  await app.ev(() => ttpPractice(90));
+  await app.ev(() => { location.hash = '#/plan'; });
+  await p.waitForSelector('#planView:not([hidden])');
+  await app.textIs('#planToday > li:nth-child(5) .plan-step-h', '5. Şarkı · 1:30 / 5+ dk');
+  await app.textIs('#planProgLbl', 'Bugün 8 / 30 dk çalıştın');
+  // Planda olmayan egzersiz: yalnızca bugünkü süre; rehberde sayaç yok
+  await app.openEx('g-i1');
+  eq([await app.text('#exClockTime'), await app.text('#exClockStep'), await p.isVisible('#exClockBar')], ['Bugün 0:00', '', false], 'plan dışı');
+  await app.openEx('r-gitar');
+  assert(!(await p.isVisible('#exClock')), 'rehberde sayaç yok');
+  await app.close();
+});
+
 test('esnek plan: günlük süre 15/30/45 dk, aşamaya hazır olunca öneri, şarkı adımında kütüphaneden şarkı', async (b, t) => {
   const app = await App.open(b, t);
   const p = app.page;
@@ -1167,10 +1243,7 @@ test('çalma listeleri: oluştur, şarkı ekle, sırala, listede sonraki şarkı
     await p.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#songList .song-title')].map((e) => e.textContent)) === JSON.stringify(w), want, { timeout: 5000 }).catch(() => {});
     eq(await app.titles(), want, msg);
   };
-  const textIs = async (sel, want, msg) => {
-    await p.waitForFunction(([q, w]) => document.querySelector(q)?.textContent === w, [sel, want], { timeout: 5000 }).catch(() => {});
-    eq(await app.text(sel), want, msg);
-  };
+  const textIs = (sel, want, msg) => app.textIs(sel, want, msg);
   const more = async (title, act) => {
     if (!(await p.isVisible(`${song(title)} [data-act="${act}"]`))) await app.click(`${song(title)} [data-act="more"]`);
     await app.click(`${song(title)} [data-act="${act}"]`);
@@ -1581,6 +1654,14 @@ test('dar ekran (360 px): egzersiz listesi, egzersiz paneli ve metronom sığar'
   await app.page.waitForSelector('#planView:not([hidden]) #planToday li');
   await app.click('.plan-rules summary');
   ok(await fits(), 'çalışma planı');
+  // Süre sayacı, süre dolunca sonraki düğmesiyle
+  await app.click('#planToday [data-id="g-b1"]');
+  await app.ready();
+  await app.ev(() => ttpPractice(300));
+  await app.page.waitForSelector('#exClockNext:not([hidden])');
+  ok(await fits(), 'süre sayacı');
+  await app.click('#btnBack');
+  await app.page.waitForSelector('#planView:not([hidden])');
   await app.ev(() => { location.hash = '#/gecmis'; });
   await app.page.waitForSelector('#histView:not([hidden])');
   ok(await fits(), 'çalışma geçmişi');

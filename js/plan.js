@@ -127,5 +127,10 @@ export function pick(ids, n, progress, now = Date.now()) {
   return [...today, ...rest].slice(0, n);
 }
 
+// Bugünkü adımlar ve önerilen egzersizleri. Her egzersizin hedef süresi adımın süresinin payı
+// (ör. Teknik 10 dk, 2 egzersiz → 5'er dk). Süre çalarken işler (çalışma geçmişindeki süre).
+export const todaySteps = (plan, st, minutes, progress, now = Date.now()) => dailySteps(plan, minutes)
+  .map((step) => ({ ...step, ids: pick(st[step.key], step.n, progress, now), goal: (step.min * 60) / step.n }));
+
 // Bir aşamanın bütün egzersizleri (tekrarsız, plandaki sırayla)
 export const stageIds = (plan, st) => [...new Set(plan.steps.flatMap((s) => st[s.key]))];

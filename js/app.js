@@ -3,7 +3,7 @@
 // aynı numarayla istenir; böylece önbellekten eski bir betik yeni sayfayla karışamaz.
 import { db } from './db.js?v=__SURUM__';
 import { EXERCISES, EX_BPM_MAX, EX_BPM_MIN, EX_INST, LEVELS, exTempo, exerciseTex, findExercise, tsLabel } from './egzersiz.js?v=__SURUM__';
-import { DURATIONS, PLANS, READY_SHARE, dailySteps, isToday, pick, stageIds } from './plan.js?v=__SURUM__';
+import { DURATIONS, PLANS, READY_SHARE, isToday, stageIds, todaySteps } from './plan.js?v=__SURUM__';
 import { Metronome, tapper } from './metronom.js?v=__SURUM__';
 import { makeBackup, restoreBackup } from './yedek.js?v=__SURUM__';
 import { TUNINGS, Tuner, nearestString, noteFrom, noteName } from './akort.js?v=__SURUM__';
@@ -755,6 +755,9 @@ async function openExercise(id) {
     return;
   }
   const saved = await db.getEx(id).catch(() => null);
+  // Süre sayacı için: bugünkü plan (ilerlemeye göre) ve bugün çalınan süre
+  await loadToday();
+  try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { /* sayaç hedefsiz kalır */ }
   const rec = {
     id,
     ex,
@@ -793,6 +796,7 @@ function showPlayer(song, sc) {
   $('#pTitle').textContent = song.title;
   $('#pArtist').textContent = song.artist || stripExt(song.file || '');
   updatePlayList();
+  setupExClock();
   document.title = `${song.title} · Tab-to-Play`;
   renderPresets();
 
@@ -1512,15 +1516,40 @@ let practiceQueue = Promise.resolve();
 const pad2 = (n) => String(n).padStart(2, '0');
 const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 
+// Bugünün kaydı (geçmişteki gün): çalardaki sayaç ve plan buradan okur. Yazmayı beklemeden
+// hemen artar, yoksa sayaç her yazmada bir an geri giderdi.
+let todayRec = { day: dayKey(), sec: 0, items: {} };
+async function loadToday() {
+  await practiceQueue;
+  const day = dayKey();
+  try { todayRec = (await db.getDay(day)) || { day, sec: 0, items: {} }; } catch { todayRec = { day, sec: 0, items: {} }; }
+}
+const counts = (song, sec) => !!song && sec >= 0.5 && !song.ex?.guide; // rehber çalışma sayılmaz
+function addToday(song, sec) {
+  if (!counts(song, sec)) return;
+  const day = dayKey();
+  if (todayRec.day !== day) todayRec = { day, sec: 0, items: {} };
+  const it = (todayRec.items[song.id] ||= { sec: 0, kind: song.ex ? 'ex' : 'song' });
+  it.sec += sec;
+  todayRec.sec += sec;
+}
+const todaySec = (id) => (todayRec.day === dayKey() ? todayRec.items[id]?.sec || 0 : 0);
+// Henüz yazılmamış, şu an çalmakta olan süre
+const liveSec = () => (playClock ? Math.min(30, (performance.now() - playClock) / 1000) : 0);
+
+let clockTimer = 0;
 function practiceStart() {
   if (playClock) return;
   playClock = performance.now();
   practiceTimer = setInterval(practiceTick, 15000);
+  clockTimer = setInterval(renderExClock, 1000);
 }
 function practiceStop() {
   practiceTick();
   playClock = 0;
   clearInterval(practiceTimer);
+  clearInterval(clockTimer);
+  renderExClock();
 }
 function practiceTick() {
   if (!playClock || !cur) return;
@@ -1529,11 +1558,12 @@ function practiceTick() {
   const sec = Math.min(30, (now - playClock) / 1000);
   playClock = now;
   const song = cur;
+  addToday(song, sec);
   practiceQueue = practiceQueue.then(() => addPractice(song, sec));
 }
 
 async function addPractice(song, sec) {
-  if (!song || sec < 0.5 || song.ex?.guide) return; // rehber çalışma sayılmaz
+  if (!counts(song, sec)) return;
   const ex = song.ex;
   const bpm = Math.round(ex ? song.s.speed : ((song.tempo || 0) * song.s.speed) / 100);
   const steady = sec >= BPM_SEC && bpm > 0;
@@ -1553,7 +1583,69 @@ async function addPractice(song, sec) {
   await db.putEx(exRecord(song)).catch((e) => console.warn('Kaydedilemedi', e));
 }
 // Testler için: açık şarkı ya da egzersiz o kadar süre çalınmış gibi
-window.ttpPractice = (sec) => { const song = cur; practiceQueue = practiceQueue.then(() => addPractice(song, sec)); return practiceQueue; };
+window.ttpPractice = (sec) => {
+  const song = cur;
+  addToday(song, sec);
+  renderExClock();
+  practiceQueue = practiceQueue.then(() => addPractice(song, sec));
+  return practiceQueue;
+};
+
+// ---------------------------------------------------------------- çalardaki süre
+// Egzersizde üstte: bugün ne kadar çalındı. Bugünkü plandaysa hedef süre ve adım; süre dolunca
+// haber verilir ve plandaki sonraki egzersize geçilebilir.
+let clockGoal = null; // { step, order: [{ id, goal }], told }
+function setupExClock() {
+  const ex = cur?.ex;
+  $('#exClock').hidden = !ex || !!ex.guide;
+  clockGoal = null;
+  if (!ex || ex.guide) return;
+  const steps = planToday(ex.inst);
+  const step = steps.find((x) => x.ids.includes(cur.id));
+  if (step) {
+    clockGoal = {
+      step,
+      order: steps.flatMap((x) => x.ids.map((id) => ({ id, goal: x.goal }))),
+      told: todaySec(cur.id) >= step.goal, // açılışta zaten dolmuşsa yeniden söylenmez
+    };
+  }
+  renderExClock();
+}
+// Plandaki sonraki egzersiz: bu egzersizden sonra gelen, süresi dolmamış ilk egzersiz (sonda başa döner)
+function nextInPlan(g) {
+  const i = g.order.findIndex((o) => o.id === cur.id);
+  const rest = [...g.order.slice(i + 1), ...g.order.slice(0, i)];
+  return rest.find((o) => todaySec(o.id) < o.goal)?.id || null;
+}
+function renderExClock() {
+  if (!cur?.ex || $('#exClock').hidden) return;
+  const sec = todaySec(cur.id) + liveSec();
+  const g = clockGoal;
+  const ok = !!g && sec >= g.step.goal;
+  $('#exClockTime').textContent = g ? `${fmtTime(sec * 1000)} / ${g.step.goal / 60} dk` : `Bugün ${fmtTime(sec * 1000)}`;
+  $('#exClockStep').textContent = g ? ` · ${g.step.title}` : '';
+  $('#exClockOk').hidden = !ok;
+  $('#exClockBar').hidden = !g || ok; // dolunca yerine sonraki düğmesi gelir
+  if (g) $('#exClockBar i').style.width = `${Math.min(100, (sec / g.step.goal) * 100)}%`;
+  $('#exClock').classList.toggle('ok', ok);
+  $('#exClockNext').hidden = !ok;
+  if (!ok) return;
+  if (!g.told) {
+    g.told = true;
+    toast(`${g.step.goal / 60} dk tamam ✓`, 4000);
+    try { navigator.vibrate?.(200); } catch { /* yok */ }
+  }
+  const next = nextInPlan(g);
+  $('#exClockNext').dataset.id = next || '';
+  $('#exClockNext').textContent = next ? `Sonraki: ${findExercise(next).title} ›` : 'Plana dön ›';
+}
+$('#exClockNext').addEventListener('click', () => {
+  const id = $('#exClockNext').dataset.id;
+  // Geri düğmesi yine plana dönsün: sonraki egzersiz geçmişte yeni bir adım açmaz
+  if (id) location.replace(`#/egzersiz/${id}`);
+  else if (cameToExPlayerFrom === 'plan') history.back();
+  else location.hash = '#/plan';
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) practiceTick(); });
 addEventListener('pagehide', practiceTick);
 
@@ -1588,7 +1680,8 @@ function renderExList() {
 
 // Egzersiz satırı; planda hedef tempo ve bugün çalışıldıysa ✓
 const exTarget = (x) => Math.round((x.bpm + x.max) / 2 / 5) * 5;
-function exRow(x, { plan = false } = {}) {
+// goal: bugünkü plandaki satır (hedef süre, saniye); many: adımda birden çok egzersiz var
+function exRow(x, { plan = false, goal = 0, many = false } = {}) {
   const rec = exProgress.get(x.id);
   // Yalnızca açıp çıkmak "son tempo" sayılmaz; gerçekten çalınmış olmalı
   const last = rec?.played ? rec.s?.speed : null;
@@ -1610,9 +1703,13 @@ function exRow(x, { plan = false } = {}) {
     const t = exTarget(x);
     const ok = (rec?.best || 0) >= t; // hedef tempoda en az birkaç saniye çalındı
     meta.append(el('span', { class: ok ? 'last' : '', text: ok ? `Hedef ${t} BPM ✓` : `Hedef ${t} BPM` }));
+    // Bugünkü planda ✓ hedef süre dolunca; aşamanın listesinde bugün çalışılınca.
     // ✓ ekran okuyucuda "onay işareti" diye okunmasın: görünmez metinle anlatılır
-    if (isToday(rec?.done)) {
-      main.querySelector('.ex-title').append(el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }), el('span', { class: 'sr-only', text: ' (bugün çalışıldı)' }));
+    const sec = todaySec(x.id);
+    if (goal && many && sec >= 1) meta.append(el('span', { class: sec >= goal ? 'last' : '', text: `⏱ ${fmtTime(Math.min(sec, goal) * 1000)} / ${goal / 60} dk` }));
+    if (goal ? sec >= goal : isToday(rec?.done)) {
+      main.querySelector('.ex-title').append(el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }),
+        el('span', { class: 'sr-only', text: goal ? ' (bugünkü süre tamam)' : ' (bugün çalışıldı)' }));
     }
   }
   return el('li', { class: 'ex-item' }, main);
@@ -1652,7 +1749,7 @@ async function showPlan() {
   $('#planTitle').textContent = title;
   document.title = `${title} · Tab-to-Play`;
   renderPlan();
-  await practiceQueue;
+  await loadToday();
   try { exProgress = new Map((await db.allEx()).map((r) => [r.id, r])); } catch { exProgress = new Map(); }
   try { songs = await db.allSongs(); } catch { /* öneri olmadan da plan çalışır */ }
   renderPlan();
@@ -1665,10 +1762,15 @@ function planSongs(inst, n = 2) {
     .slice(0, n);
 }
 
+const planStageOf = (inst) => clamp(Math.round(prefs[stageKey(inst)]) || 0, 0, PLANS[inst].stages.length - 1);
+const planMinutes = () => (DURATIONS[prefs.planMin] ? Number(prefs.planMin) : 30);
+// Bugünkü plan (adımlar, önerilen egzersizler, egzersiz başına hedef süre)
+const planToday = (inst) => todaySteps(PLANS[inst], PLANS[inst].stages[planStageOf(inst)], planMinutes(), exProgress);
+
 function renderPlan() {
   const inst = exInst();
   const plan = PLANS[inst];
-  const k = clamp(Math.round(prefs[stageKey(inst)]) || 0, 0, plan.stages.length - 1);
+  const k = planStageOf(inst);
   const st = plan.stages[k];
   $$('#segStage button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === k)));
   const ids = stageIds(plan, st);
@@ -1683,16 +1785,27 @@ function renderPlan() {
       el('button', { class: 'btn primary', type: 'button', 'data-stage': k + 1, text: `${k + 2}. aşamaya geç: ${plan.stages[k + 1].title}` }));
   }
 
-  const minutes = DURATIONS[prefs.planMin] ? Number(prefs.planMin) : 30;
+  const minutes = planMinutes();
   $$('#segPlanMin button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.v) === minutes)));
   $('#planMinLbl').textContent = `(~${minutes} dk)`;
+  // Süreler: her egzersiz kendi hedefine kadar sayılır (birini uzun çalmak günü doldurmasın)
   let n = 0;
-  const steps = dailySteps(plan, minutes).map((step) => el('li', { class: 'plan-step' },
-    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. ${step.title}` }), el('span', { class: 'muted', text: ` · ${step.min} dk` })),
-    el('ul', { class: 'ex-list' }, ...pick(st[step.key], step.n, exProgress).map((id) => exRow(findExercise(id), { plan: true })))));
+  let total = 0;
+  const steps = planToday(inst).map((step) => {
+    const sec = step.ids.reduce((a, id) => a + Math.min(todaySec(id), step.goal), 0);
+    total += sec;
+    return el('li', { class: 'plan-step' },
+      stepHead(++n, step.title, sec, step.min * 60, `${step.min} dk`),
+      el('ul', { class: 'ex-list' }, ...step.ids.map((id) => exRow(findExercise(id), { plan: true, goal: step.goal, many: step.n > 1 }))));
+  });
+  const songGoal = DURATIONS[minutes].song * 60;
+  const songSec = Object.values(todayRec.day === dayKey() ? todayRec.items : {}).reduce((a, it) => a + (it.kind === 'song' ? it.sec : 0), 0);
+  total += Math.min(songSec, songGoal);
+  $('#planProgLbl').textContent = `Bugün ${Math.floor(total / 60)} / ${minutes} dk çalıştın`;
+  $('#planProg i').style.width = `${Math.min(100, (total / (minutes * 60)) * 100)}%`;
   const suggest = planSongs(inst);
   steps.push(el('li', { class: 'plan-step' },
-    el('div', { class: 'plan-step-h' }, el('b', { text: `${++n}. Şarkı` }), el('span', { class: 'muted', text: ` · ${DURATIONS[minutes].song}+ dk` })),
+    stepHead(++n, 'Şarkı', songSec, songGoal, `${DURATIONS[minutes].song}+ dk`),
     el('p', { class: 'muted small', text: 'Bugün çalıştığın tekniği kütüphanendeki bir şarkıda dene. Zor bölümü döngüye al, hızı düşür, aynı kurallarla yavaş yavaş artır.' }),
     suggest.length ? el('div', { class: 'plan-songs' }, ...suggest.map((s) => el('button', { class: 'btn', type: 'button', 'data-song': s.id },
       el('span', { text: `▶ ${s.title}` }), s.artist ? el('small', { class: 'muted', text: ` · ${s.artist}` }) : null))) : null,
@@ -1706,6 +1819,17 @@ function renderPlan() {
   $('#planAll').replaceChildren(...plan.steps.map((step) => el('section', { class: 'plan-group' },
     el('h3', { text: step.title }),
     el('ul', { class: 'ex-list' }, ...st[step.key].map((id) => exRow(findExercise(id), { plan: true }))))));
+}
+
+// Adım başlığı: ad, çalınan / hedef süre, ince çubuk; dolunca ✓
+function stepHead(n, title, sec, goal, goalLbl) {
+  const ok = sec >= goal;
+  return el('div', { class: 'plan-step-h' },
+    el('b', { text: `${n}. ${title}` }),
+    el('span', { class: 'muted', text: sec >= 1 ? ` · ${fmtTime(sec * 1000)} / ${goalLbl}` : ` · ${goalLbl}` }),
+    ok ? el('span', { class: 'done', 'aria-hidden': 'true', text: ' ✓' }) : null,
+    ok ? el('span', { class: 'sr-only', text: ' (bugün tamam)' }) : null,
+    el('span', { class: 'ex-prog', 'aria-hidden': 'true' }, el('i', { style: `width:${Math.min(100, (sec / goal) * 100)}%` })));
 }
 
 $('#btnPlan').addEventListener('click', () => { location.hash = '#/plan'; });
@@ -2284,6 +2408,7 @@ let cameToPlanFrom = null;
 let cameToHistFrom = null;
 let cameToGuideFrom = null;
 let cameToTunerFrom = null;
+let cameToExPlayerFrom = null;
 async function route() {
   const h = location.hash;
   let m;
@@ -2293,7 +2418,11 @@ async function route() {
     lastView = 'player';
     await openSong(m[1]);
   } else if ((m = h.match(/^#\/egzersiz\/([\w-]+)/))) {
-    cameFromList = ['exlist', 'plan', 'rehber'].includes(lastView);
+    // Çalardan plandaki sonraki egzersize geçince geri düğmesi önceki yere dönmeye devam eder
+    if (lastView !== 'player') {
+      cameFromList = ['exlist', 'plan', 'rehber'].includes(lastView);
+      cameToExPlayerFrom = lastView;
+    }
     lastView = 'player';
     await openExercise(m[1]);
   } else if (/^#\/egzersiz\/?$/.test(h)) {

@@ -142,8 +142,9 @@
       </div>
     </div>
     <h2 class="plan-h">Bugünkü çalışma <small class="muted" id="planMinLbl">(~30 dk)</small></h2>
+    <div class="plan-prog"><span id="planProgLbl"></span><span id="planProg" class="ex-prog" aria-hidden="true"><i></i></span></div>
     <ol id="planToday" class="plan-today"></ol>
-    <p class="muted small">Her gün en uzun süredir çalışmadığın egzersizler gelir. Çalıştıkların gün boyunca ✓ ile kalır.</p>
+    <p class="muted small">Süre yalnızca çalarken işler; egzersizi açınca çaların üstünde görünür. Hedef süre dolunca haber verilir ve ✓ gelir. Her gün en uzun süredir çalışmadığın egzersizler gelir, başladıkların gün boyunca listede kalır.</p>
     <details class="plan-rules">
       <summary>Nasıl çalışmalı?</summary>
       <ul id="planRules"></ul>
@@ -332,6 +333,12 @@
   <div id="playList" class="play-list" hidden>
     <span id="playListInfo"></span>
     <button id="playNext" class="btn small-btn" type="button"></button>
+  </div>
+  <!-- Egzersizde: bugün ne kadar çalındığı; bugünkü plandaysa hedef süre, dolunca sonraki egzersiz -->
+  <div id="exClock" class="play-list ex-clock" hidden title="Süre yalnızca çalarken işler">
+    <span class="ex-clock-t"><b id="exClockTime">0:00</b><span id="exClockStep"></span><span id="exClockOk" class="done" hidden><span aria-hidden="true"> ✓</span><span class="sr-only"> tamam</span></span></span>
+    <span id="exClockBar" class="ex-prog" aria-hidden="true"><i></i></span>
+    <button id="exClockNext" class="btn small-btn" type="button" hidden></button>
   </div>
   <main id="sheetWrap" class="sheet-wrap">
     <div id="sheet"></div>

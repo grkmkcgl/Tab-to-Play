@@ -143,6 +143,10 @@ export const db = {
     await done(tx);
     return item;
   },
+  async getDay(day) {
+    const d = await openDataDb();
+    return result(d.transaction('gunler').objectStore('gunler').get(day));
+  },
   async allDays() {
     const d = await openDataDb();
     return result(d.transaction('gunler').objectStore('gunler').getAll());
