@@ -3,7 +3,7 @@
 #
 # Önizleme: aşağıdaki önizleme dalı varsa o da .../onizleme/ adresinde yayınlanır (canlı site
 # main'den gelir, aynen kalır). O dala gönderilince Test iş akışı geçerse yayın yenilenir.
-# Dalı değiştirmek için iki yerdeki adı birlikte değiştir. Dal silinince önizleme de kalkar.
+# Dalı değiştirmek için üç yerdeki adı birlikte değiştir. Dal silinince önizleme de kalkar.
 name: Yayınla
 
 on:
@@ -12,6 +12,9 @@ on:
   workflow_run:
     workflows: [Test]
     types: [completed]
+    # Yalnızca önizleme dalının testleri. Başka dalların (ve PR'ların) testleri de tetikleseydi, aynı
+    # anda biten o boş çalışmalar aşağıdaki concurrency yüzünden asıl önizleme yayınını iptal ediyordu.
+    branches: [ccr-04f3bc7b-mmi4nj]
   workflow_dispatch:
 
 permissions:
